@@ -6,6 +6,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 All code, comments, documentation, error messages, log messages, and test names in this repository MUST be written in English.
 
+## Commit Message Conventions
+
+This repository enforces **Conventional Commits** format. All commit messages MUST follow this structure:
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Allowed types:**
+- `feat`: A new feature
+- `fix`: A bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, missing semicolons, etc.)
+- `refactor`: Code refactoring without changing functionality
+- `perf`: Performance improvements
+- `test`: Adding or updating tests
+- `build`: Build system or dependency changes
+- `ci`: CI/CD configuration changes
+- `chore`: Other changes that don't modify src or test files
+
+**Examples:**
+```
+feat(agent): add timeout support for command execution
+fix(cli): convert SSH -p option to SCP -P correctly
+docs: update README with installation instructions
+test(common): add integration test for multiple sequential commands
+refactor(protocol): simplify message encoding logic
+```
+
+**Breaking changes:**
+Append `!` after type/scope or add `BREAKING CHANGE:` in footer:
+```
+feat(protocol)!: change message format to use 8-byte length prefix
+
+BREAKING CHANGE: The protocol now uses 8-byte length prefix instead of 4-byte.
+Clients must be updated to handle the new format.
+```
+
 ## Build & Test Commands
 
 ```bash
