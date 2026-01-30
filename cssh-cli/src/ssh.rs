@@ -20,6 +20,11 @@ pub async fn run(args: CsshArgs) -> Result<(), String> {
         tracing::warn!("remote binary deployment skipped: {}", e);
     }
 
+    // Ensure socket directory exists on remote
+    if let Err(e) = ensure_remote_socket_dir(&args) {
+        tracing::warn!("failed to create socket dir: {}", e);
+    }
+
     // SSH connection
     let exit_code = run_ssh(&args, agent_port)?;
 
@@ -73,15 +78,12 @@ fn find_agent_binary() -> Result<String, String> {
 fn run_ssh(args: &CsshArgs, agent_port: u16) -> Result<i32, String> {
     let mut cmd = Command::new("ssh");
 
-    // Reverse port forwarding: connect the remote port to the local agent port
-    cmd.arg("-R")
-        .arg(format!("{}:127.0.0.1:{}", agent_port, agent_port));
-
-    // Send CSSH_PORT environment variable to the remote
-    cmd.arg("-o")
-        .arg("SendEnv=CSSH_PORT")
-        .arg("-o")
-        .arg(format!("SetEnv=CSSH_PORT={}", agent_port));
+    // Reverse forwarding: remote Unix socket → local agent TCP port
+    let remote_socket = format!(
+        "~/.cssh/sockets/{}.sock:127.0.0.1:{}",
+        agent_port, agent_port
+    );
+    cmd.arg("-R").arg(&remote_socket);
 
     // User-specified SSH options
     for opt in &args.ssh_options {
@@ -103,6 +105,23 @@ fn run_ssh(args: &CsshArgs, agent_port: u16) -> Result<i32, String> {
         .map_err(|e| format!("failed to run ssh: {}", e))?;
 
     Ok(status.code().unwrap_or(1))
+}
+
+/// Ensure the remote sockets directory exists.
+fn ensure_remote_socket_dir(args: &CsshArgs) -> Result<(), String> {
+    let mut cmd = Command::new("ssh");
+    for opt in &args.ssh_options {
+        cmd.arg(opt);
+    }
+    cmd.arg(&args.destination)
+        .arg("mkdir -p ~/.cssh/sockets");
+    let status = cmd
+        .status()
+        .map_err(|e| format!("failed to create socket dir: {}", e))?;
+    if !status.success() {
+        return Err("failed to create ~/.cssh/sockets on remote".to_string());
+    }
+    Ok(())
 }
 
 /// Guard that automatically kills the agent process on drop.

@@ -30,9 +30,6 @@ pub fn deploy_remote_binary(args: &CsshArgs) -> Result<(), String> {
     // Set executable permission
     set_remote_executable(args, &remote_bin_path)?;
 
-    // Add ~/.cssh/ to PATH in ~/.bashrc (only if not already added)
-    setup_remote_path(args)?;
-
     tracing::info!("remote binary deployed");
     Ok(())
 }
@@ -62,13 +59,14 @@ fn find_local_binary() -> Result<String, String> {
         .map_err(|e| format!("{}", e))
 }
 
-/// Create the ~/.cssh/ directory on the remote.
+/// Create the remote installation directory.
 fn create_remote_directory(args: &CsshArgs) -> Result<(), String> {
+    let script = remote_setup::generate_setup_script();
     let mut cmd = Command::new("ssh");
     for opt in &args.ssh_options {
         cmd.arg(opt);
     }
-    cmd.arg(&args.destination).arg("mkdir -p ~/.cssh");
+    cmd.arg(&args.destination).arg(&script);
 
     let status = cmd
         .status()
@@ -123,26 +121,6 @@ fn set_remote_executable(args: &CsshArgs, remote_path: &str) -> Result<(), Strin
 
     if !status.success() {
         return Err("failed to set executable permission".to_string());
-    }
-    Ok(())
-}
-
-/// Add ~/.cssh/ to PATH in the remote ~/.bashrc.
-fn setup_remote_path(args: &CsshArgs) -> Result<(), String> {
-    let script = remote_setup::generate_setup_script();
-
-    let mut cmd = Command::new("ssh");
-    for opt in &args.ssh_options {
-        cmd.arg(opt);
-    }
-    cmd.arg(&args.destination).arg(&script);
-
-    let status = cmd
-        .status()
-        .map_err(|e| format!("failed to setup PATH: {}", e))?;
-
-    if !status.success() {
-        return Err("failed to setup PATH".to_string());
     }
     Ok(())
 }

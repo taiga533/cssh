@@ -1,6 +1,15 @@
-/// Remote installation directory.
+/// Remote binary installation directory.
+///
+/// Uses `~/.local/bin` which is included in PATH by default on most
+/// Linux distributions (XDG standard), avoiding the need to modify
+/// shell configuration files like `.bashrc`.
 pub fn remote_install_dir() -> &'static str {
-    "~/.cssh"
+    "~/.local/bin"
+}
+
+/// Remote sockets directory path.
+pub fn remote_sockets_dir() -> &'static str {
+    "~/.cssh/sockets"
 }
 
 /// Remote binary name.
@@ -11,17 +20,14 @@ pub fn remote_binary_name() -> &'static str {
 
 /// Generate a setup script for the remote environment.
 ///
-/// This script is executed on the remote host to:
-/// 1. Create the ~/.cssh directory
-/// 2. Add it to PATH in ~/.bashrc
+/// Creates the necessary directories on the remote host:
+/// - `~/.local/bin` for the cexec binary
+/// - `~/.cssh/sockets` for Unix domain sockets
 pub fn generate_setup_script() -> String {
-    let install_dir = remote_install_dir();
-    let path_export = r#"export PATH="$HOME/.cssh:$PATH""#;
-
-    // Unix/Linux shell script
     format!(
-        r#"mkdir -p {} && grep -q '{}' ~/.bashrc 2>/dev/null || echo '{}' >> ~/.bashrc"#,
-        install_dir, path_export, path_export
+        "mkdir -p {} {}",
+        remote_install_dir(),
+        remote_sockets_dir()
     )
 }
 
@@ -31,7 +37,12 @@ mod tests {
 
     #[test]
     fn remote_install_dir_returns_correct_value() {
-        assert_eq!(remote_install_dir(), "~/.cssh");
+        assert_eq!(remote_install_dir(), "~/.local/bin");
+    }
+
+    #[test]
+    fn remote_sockets_dir_returns_correct_value() {
+        assert_eq!(remote_sockets_dir(), "~/.cssh/sockets");
     }
 
     #[test]
@@ -43,8 +54,8 @@ mod tests {
     fn generate_setup_script_creates_valid_script() {
         let script = generate_setup_script();
         assert!(script.contains("mkdir -p"));
-        assert!(script.contains("~/.cssh"));
-        assert!(script.contains("export PATH"));
-        assert!(script.contains(".bashrc"));
+        assert!(script.contains("~/.local/bin"));
+        assert!(script.contains("~/.cssh/sockets"));
+        assert!(!script.contains(".bashrc"));
     }
 }
