@@ -91,7 +91,4 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: cocogitto/cocogitto-action@9a9fe03b31c47444290c0d7f9b1ee1b44ee13f20 # v4.1.0
-        with:
-          command: check
-          args: --from-latest-tag
+      - uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
