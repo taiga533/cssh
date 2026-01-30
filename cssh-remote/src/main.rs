@@ -1,26 +1,18 @@
 mod client;
 
-use std::path::PathBuf;
-
-/// Resolve the agent connection by scanning the socket directory.
+/// Resolve the agent port by reading the port file.
 ///
-/// Scans `~/.cssh/sockets/` for `.sock` files and returns the first
-/// one that accepts a connection.
-fn resolve_socket() -> Result<PathBuf, String> {
+/// Reads `~/.cssh/agent_port` which is written by cssh before
+/// establishing the SSH connection.
+fn resolve_port() -> Result<u16, String> {
     let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
-    let sockets_dir = format!("{}/.cssh/sockets", home);
-    if let Ok(entries) = std::fs::read_dir(&sockets_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("sock") {
-                if std::os::unix::net::UnixStream::connect(&path).is_ok() {
-                    return Ok(path);
-                }
-            }
-        }
-    }
-
-    Err("no active cssh agent found (no sockets in ~/.cssh/sockets/)".to_string())
+    let port_file = format!("{}/.cssh/agent_port", home);
+    let content = std::fs::read_to_string(&port_file)
+        .map_err(|e| format!("failed to read {}: {}", port_file, e))?;
+    content
+        .trim()
+        .parse::<u16>()
+        .map_err(|_| format!("invalid port in {}: '{}'", port_file, content.trim()))
 }
 
 #[tokio::main]
@@ -31,7 +23,7 @@ async fn main() {
         std::process::exit(1);
     }
 
-    let socket_path = match resolve_socket() {
+    let port = match resolve_port() {
         Ok(p) => p,
         Err(e) => {
             eprintln!("cssh-remote error: {}", e);
@@ -39,7 +31,7 @@ async fn main() {
         }
     };
 
-    match client::execute(&socket_path, args).await {
+    match client::execute(port, args).await {
         Ok(response) => {
             use std::io::Write;
             std::io::stdout().write_all(&response.stdout).ok();
@@ -56,54 +48,66 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::net::UnixListener;
     use tempfile::TempDir;
 
     #[test]
-    fn resolve_socket_finds_connectable_socket() {
+    fn resolve_port_reads_port_from_file() {
         // Arrange
-        let tmp = TempDir::new().unwrap();
-        let sock_path = tmp.path().join("12345.sock");
-        let _listener = UnixListener::bind(&sock_path).unwrap();
-
-        // Temporarily override HOME
-        let original_home = std::env::var("HOME").unwrap();
-        // Create the sockets dir structure under tmp
         let fake_home = TempDir::new().unwrap();
-        let sockets_dir = fake_home.path().join(".cssh/sockets");
-        std::fs::create_dir_all(&sockets_dir).unwrap();
-        let sock_in_dir = sockets_dir.join("12345.sock");
-        let _listener2 = UnixListener::bind(&sock_in_dir).unwrap();
+        let cssh_dir = fake_home.path().join(".cssh");
+        std::fs::create_dir_all(&cssh_dir).unwrap();
+        std::fs::write(cssh_dir.join("agent_port"), "54321\n").unwrap();
 
+        let original_home = std::env::var("HOME").unwrap();
         std::env::set_var("HOME", fake_home.path().to_str().unwrap());
+
         // Act
-        let result = resolve_socket();
+        let result = resolve_port();
+
         // Restore
         std::env::set_var("HOME", &original_home);
 
         // Assert
-        assert!(result.is_ok());
-        assert!(result.unwrap().to_str().unwrap().ends_with(".sock"));
+        assert_eq!(result.unwrap(), 54321);
     }
 
     #[test]
-    fn resolve_socket_returns_error_when_no_sockets() {
+    fn resolve_port_returns_error_when_file_missing() {
         // Arrange
         let fake_home = TempDir::new().unwrap();
-        let sockets_dir = fake_home.path().join(".cssh/sockets");
-        std::fs::create_dir_all(&sockets_dir).unwrap();
-
         let original_home = std::env::var("HOME").unwrap();
         std::env::set_var("HOME", fake_home.path().to_str().unwrap());
 
         // Act
-        let result = resolve_socket();
+        let result = resolve_port();
 
         // Restore
         std::env::set_var("HOME", &original_home);
 
         // Assert
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("no active cssh agent found"));
+        assert!(result.unwrap_err().contains("failed to read"));
+    }
+
+    #[test]
+    fn resolve_port_returns_error_for_invalid_content() {
+        // Arrange
+        let fake_home = TempDir::new().unwrap();
+        let cssh_dir = fake_home.path().join(".cssh");
+        std::fs::create_dir_all(&cssh_dir).unwrap();
+        std::fs::write(cssh_dir.join("agent_port"), "not_a_number\n").unwrap();
+
+        let original_home = std::env::var("HOME").unwrap();
+        std::env::set_var("HOME", fake_home.path().to_str().unwrap());
+
+        // Act
+        let result = resolve_port();
+
+        // Restore
+        std::env::set_var("HOME", &original_home);
+
+        // Assert
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid port"));
     }
 }

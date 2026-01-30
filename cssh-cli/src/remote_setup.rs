@@ -7,11 +7,6 @@ pub fn remote_install_dir() -> &'static str {
     "~/.local/bin"
 }
 
-/// Remote sockets directory path.
-pub fn remote_sockets_dir() -> &'static str {
-    "~/.cssh/sockets"
-}
-
 /// Remote binary name.
 #[allow(dead_code)]
 pub fn remote_binary_name() -> &'static str {
@@ -22,13 +17,9 @@ pub fn remote_binary_name() -> &'static str {
 ///
 /// Creates the necessary directories on the remote host:
 /// - `~/.local/bin` for the cexec binary
-/// - `~/.cssh/sockets` for Unix domain sockets
+/// - `~/.cssh` for agent port file
 pub fn generate_setup_script() -> String {
-    format!(
-        "mkdir -p {} {}",
-        remote_install_dir(),
-        remote_sockets_dir()
-    )
+    format!("mkdir -p {} ~/.cssh", remote_install_dir())
 }
 
 #[cfg(test)]
@@ -41,11 +32,6 @@ mod tests {
     }
 
     #[test]
-    fn remote_sockets_dir_returns_correct_value() {
-        assert_eq!(remote_sockets_dir(), "~/.cssh/sockets");
-    }
-
-    #[test]
     fn remote_binary_name_returns_correct_value() {
         assert_eq!(remote_binary_name(), "cexec");
     }
@@ -55,7 +41,7 @@ mod tests {
         let script = generate_setup_script();
         assert!(script.contains("mkdir -p"));
         assert!(script.contains("~/.local/bin"));
-        assert!(script.contains("~/.cssh/sockets"));
+        assert!(script.contains("~/.cssh"));
         assert!(!script.contains(".bashrc"));
     }
 }

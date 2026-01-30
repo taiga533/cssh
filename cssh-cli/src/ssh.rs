@@ -9,7 +9,8 @@ use cssh_common::platform;
 ///
 /// 1. Start the agent in the background
 /// 2. Deploy cssh-remote to the remote host
-/// 3. Open SSH connection with reverse port forwarding
+/// 3. Write agent port to a file on the remote host
+/// 4. Open SSH connection with reverse port forwarding
 pub async fn run(args: CsshArgs) -> Result<(), String> {
     // Start the agent
     let (agent_process, agent_port) = start_agent(&args)?;
@@ -20,10 +21,8 @@ pub async fn run(args: CsshArgs) -> Result<(), String> {
         tracing::warn!("remote binary deployment skipped: {}", e);
     }
 
-    // Ensure socket directory exists on remote
-    if let Err(e) = ensure_remote_socket_dir(&args) {
-        tracing::warn!("failed to create socket dir: {}", e);
-    }
+    // Write agent port to file on remote
+    write_remote_port_file(&args, agent_port)?;
 
     // SSH connection
     let exit_code = run_ssh(&args, agent_port)?;
@@ -78,12 +77,9 @@ fn find_agent_binary() -> Result<String, String> {
 fn run_ssh(args: &CsshArgs, agent_port: u16) -> Result<i32, String> {
     let mut cmd = Command::new("ssh");
 
-    // Reverse forwarding: remote Unix socket → local agent TCP port
-    let remote_socket = format!(
-        "~/.cssh/sockets/{}.sock:127.0.0.1:{}",
-        agent_port, agent_port
-    );
-    cmd.arg("-R").arg(&remote_socket);
+    // Reverse port forwarding: connect the remote port to the local agent port
+    cmd.arg("-R")
+        .arg(format!("{}:127.0.0.1:{}", agent_port, agent_port));
 
     // User-specified SSH options
     for opt in &args.ssh_options {
@@ -107,19 +103,23 @@ fn run_ssh(args: &CsshArgs, agent_port: u16) -> Result<i32, String> {
     Ok(status.code().unwrap_or(1))
 }
 
-/// Ensure the remote sockets directory exists.
-fn ensure_remote_socket_dir(args: &CsshArgs) -> Result<(), String> {
+/// Write the agent port number to a file on the remote host.
+///
+/// Creates `~/.cssh/agent_port` containing the port number so that
+/// cexec can discover the agent without environment variables or
+/// Unix domain socket forwarding.
+fn write_remote_port_file(args: &CsshArgs, port: u16) -> Result<(), String> {
     let mut cmd = Command::new("ssh");
     for opt in &args.ssh_options {
         cmd.arg(opt);
     }
     cmd.arg(&args.destination)
-        .arg("mkdir -p ~/.cssh/sockets");
+        .arg(format!("mkdir -p ~/.cssh && echo {} > ~/.cssh/agent_port", port));
     let status = cmd
         .status()
-        .map_err(|e| format!("failed to create socket dir: {}", e))?;
+        .map_err(|e| format!("failed to write port file: {}", e))?;
     if !status.success() {
-        return Err("failed to create ~/.cssh/sockets on remote".to_string());
+        return Err("failed to write ~/.cssh/agent_port on remote".to_string());
     }
     Ok(())
 }
