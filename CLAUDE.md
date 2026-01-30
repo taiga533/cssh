@@ -2,38 +2,42 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## ビルド・テストコマンド
+## Language Policy
+
+All code, comments, documentation, error messages, log messages, and test names in this repository MUST be written in English.
+
+## Build & Test Commands
 
 ```bash
-# ワークスペース全体のビルド
+# Build entire workspace
 cargo build --workspace
 
-# リリースビルド
+# Release build
 cargo build --release --workspace
 
-# 全テスト実行
+# Run all tests
 cargo test --workspace
 
-# 特定クレートのテスト
+# Run tests for a specific crate
 cargo test -p cssh-common
 cargo test -p cssh-agent
 cargo test -p cssh-remote
 cargo test -p cssh-cli
 
-# 特定のテスト関数を実行
-cargo test -p cssh-common -- プロトコル名の一部
+# Run a specific test function (substring match)
+cargo test -p cssh-common -- request_serialization
 
-# E2Eテスト（Docker必須）
+# E2E tests (requires Docker)
 bash e2e/run_e2e.sh
 ```
 
-ビルド成果物は3つのバイナリ: `cssh`（CLI本体）、`cssh-agent`（ホスト側エージェント）、`cexec`（リモート実行ファイル）。
+Build produces three binaries: `cssh` (CLI), `cssh-agent` (host-side agent), `cexec` (remote executable).
 
-## アーキテクチャ
+## Architecture
 
-SSHをラップし、逆ポートフォワーディング経由でリモートからホスト側コマンドを実行するツール。
+A tool that wraps SSH and executes host-side commands from the remote via reverse port forwarding.
 
-### クレート構成と依存関係
+### Crate Structure and Dependencies
 
 ```
 cssh-cli  ──→ cssh-common ←── cssh-agent
@@ -41,25 +45,25 @@ cssh-cli  ──→ cssh-common ←── cssh-agent
                cssh-remote
 ```
 
-- **cssh-common**: 全クレートの基盤。プロトコル定義（`ExecuteRequest`/`ExecuteResponse`）、エラー型（`CsshError`）、TCP上のJSON読み書き関数を提供
-- **cssh-agent**: ホスト側で動作するTCPサーバー。リクエストを受けて`std::process::Command`でコマンド実行し結果を返す。ポート番号をstdoutに出力して親プロセス（cssh-cli）に通知する（tracingログはstderrに出力）
-- **cssh-remote**: リモート側で動作するTCPクライアント（バイナリ名: `cexec`）。`CSSH_PORT`環境変数でエージェントのポートを取得し接続する
-- **cssh-cli**: CLI本体（バイナリ名: `cssh`）。エージェント起動 → cexecのSCP配置 → SSH接続（`-R`逆ポートフォワーディング + `SetEnv`）を一括実行。引数解析は手動パース（`args.rs`）でSSHオプションをそのまま転送する
+- **cssh-common**: Foundation for all crates. Provides protocol definitions (`ExecuteRequest`/`ExecuteResponse`), error type (`CsshError`), and JSON read/write functions over TCP.
+- **cssh-agent**: Host-side TCP server. Receives requests, executes commands via `std::process::Command`, and returns results. Outputs port number to stdout for the parent process (tracing logs go to stderr).
+- **cssh-remote**: Remote-side TCP client (binary name: `cexec`). Reads the agent port from the `CSSH_PORT` environment variable.
+- **cssh-cli**: CLI entry point (binary name: `cssh`). Orchestrates: agent startup → SCP deployment of cexec → SSH connection (`-R` reverse port forwarding + `SetEnv`). Argument parsing is manual (`args.rs`) to pass SSH options through transparently.
 
-### 通信プロトコル
+### Communication Protocol
 
-JSON over TCP、4バイトビッグエンディアン長さプレフィクス付き。最大メッセージサイズ16MB。`protocol.rs`の`read_message`/`write_message`が非同期I/O、`encode_message`/`decode_message`が同期版。
+JSON over TCP with a 4-byte big-endian length prefix. Maximum message size is 16MB. `protocol.rs` provides `read_message`/`write_message` (async) and `encode_message`/`decode_message` (sync).
 
-### 主要な設計判断
+### Key Design Decisions
 
-- エージェントのポート通知はstdout最初の1行で行う。親プロセスが`BufReader::read_line`で読み取る
-- `AgentGuard`（`ssh.rs`）がRAIIパターンでエージェントプロセスをdrop時に自動kill
-- SCPでリモートに配置する際、SSHの`-p`オプションをSCPの`-P`に変換する処理が`deployment.rs`にある
-- 依存クレートのバージョンはワークスペースルートの`[workspace.dependencies]`で一元管理
+- Agent port notification uses the first line of stdout. The parent process reads it with `BufReader::read_line`.
+- `AgentGuard` (`ssh.rs`) uses the RAII pattern to automatically kill the agent process on drop.
+- When deploying via SCP, SSH's `-p` option is converted to SCP's `-P` in `deployment.rs`.
+- Dependency versions are centrally managed in the workspace root `[workspace.dependencies]`.
 
-## テスト規約
+## Test Conventions
 
-- Arrange - Act - Assert の順序で記述
-- テストケース名は日本語で、何をテストしているか明確に（例: `echoコマンドが正しく実行される`）
-- モックは最小限。TCPテストでは実際に`TcpListener`を`127.0.0.1:0`でバインドして使用
-- 結合テストは`cssh-common/tests/integration_test.rs`に配置
+- Follow the Arrange - Act - Assert pattern.
+- Test names must clearly describe what is being tested (e.g., `echo_command_executes_correctly`).
+- Minimize mocks. For TCP tests, bind a real `TcpListener` to `127.0.0.1:0`.
+- Integration tests go in `cssh-common/tests/integration_test.rs`.

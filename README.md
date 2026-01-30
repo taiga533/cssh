@@ -1,72 +1,72 @@
 # cssh
 
-SSH をラップし、接続時にホスト側エージェントを自動起動する CLI ツール。逆ポートフォワーディングにより、リモートからホスト側のコマンドを実行できる。
+A CLI tool that wraps SSH and automatically starts a host-side agent on connection. Enables executing host-side commands from the remote via reverse port forwarding.
 
-## 概要
+## Overview
 
 ```
 ┌──────────────┐        SSH (-R)         ┌──────────────┐
-│  ホスト側    │◄────────────────────────│ リモート側   │
+│  Host side   │◄────────────────────────│ Remote side  │
 │              │                         │              │
 │  cssh-agent  │◄───── TCP (JSON) ───────│  cexec       │
-│(コマンド実行)│                         │(コマンド送信)│
+│(cmd executor)│                         │(cmd sender)  │
 └──────────────┘                         └──────────────┘
 ```
 
-`cssh` は以下を自動で行う:
+`cssh` automatically performs the following:
 
-1. ホスト側で `cssh-agent` をバックグラウンド起動
-2. `cexec` バイナリをリモートの `~/.cssh/` に配置（初回のみ）
-3. `-R` 逆ポートフォワーディング付きで SSH 接続
-4. リモートで `cexec <コマンド>` を実行すると、ホスト側でそのコマンドが実行される
+1. Starts `cssh-agent` in the background on the host
+2. Deploys the `cexec` binary to `~/.cssh/` on the remote (first time only)
+3. Opens an SSH connection with `-R` reverse port forwarding
+4. Running `cexec <command>` on the remote executes that command on the host
 
-## インストール
+## Installation
 
 ```bash
 cargo build --release
 ```
 
-ビルド後のバイナリは `target/release/` に生成される:
+Build artifacts are generated in `target/release/`:
 
-| バイナリ | 説明 |
+| Binary | Description |
 |---|---|
-| `cssh` | CLI 本体 |
-| `cssh-agent` | ホスト側エージェント |
-| `cexec` | リモート実行ファイル |
+| `cssh` | CLI entry point |
+| `cssh-agent` | Host-side agent |
+| `cexec` | Remote executable |
 
-3つのバイナリを同一ディレクトリに配置し、PATH に追加する。
+Place all three binaries in the same directory and add it to your PATH.
 
 ```bash
 export PATH="$(pwd)/target/release:$PATH"
 ```
 
-## 使い方
+## Usage
 
-### 基本
+### Basic
 
 ```bash
 cssh user@example.com
 ```
 
-### SSH オプション付き
+### With SSH options
 
-SSH オプション（`-p`, `-i` 等）はそのまま ssh に転送される。
+SSH options (`-p`, `-i`, etc.) are passed through to ssh as-is.
 
 ```bash
 cssh -p 2222 -i ~/.ssh/id_rsa user@example.com
 ```
 
-### リモートコマンド指定
+### Specifying a remote command
 
-`--` の後にリモートで実行するコマンドを指定できる。
+Use `--` to specify a command to run on the remote.
 
 ```bash
 cssh user@example.com -- ls -la
 ```
 
-### リモートからホスト側コマンドを実行
+### Executing host-side commands from the remote
 
-SSH 接続後、リモートのシェルで:
+After connecting via SSH, run the following in the remote shell:
 
 ```bash
 cexec echo "hello from host"
@@ -74,67 +74,67 @@ cexec cat /etc/hostname
 cexec pwd
 ```
 
-### cssh 独自オプション
+### cssh-specific options
 
-| オプション | 説明 | デフォルト |
+| Option | Description | Default |
 |---|---|---|
-| `--remote-name <NAME>` | リモート実行ファイル名 | `cexec` |
-| `--listen-port <PORT>` | エージェントポート | 自動割り当て |
+| `--remote-name <NAME>` | Remote executable name | `cexec` |
+| `--listen-port <PORT>` | Agent port | Auto-assigned |
 
 ```bash
 cssh --remote-name myexec --listen-port 8080 user@example.com
 ```
 
-## SSH サーバー設定
+## SSH Server Configuration
 
-`CSSH_PORT` 環境変数をリモートに送信するため、SSH サーバーの `sshd_config` に以下を追加する:
+To send the `CSSH_PORT` environment variable to the remote, add the following to `sshd_config` on the SSH server:
 
 ```
 AcceptEnv CSSH_PORT
 ```
 
-## 通信プロトコル
+## Communication Protocol
 
-JSON over TCP（長さプレフィクス付き）。
+JSON over TCP with a length prefix.
 
 ```
-[4バイト: メッセージ長（ビッグエンディアン）][JSON ペイロード]
+[4 bytes: message length (big-endian)][JSON payload]
 ```
 
-**リクエスト:**
+**Request:**
 
 ```json
 { "args": ["echo", "hello"] }
 ```
 
-**レスポンス:**
+**Response:**
 
 ```json
 { "exit_code": 0, "stdout": [...], "stderr": [...] }
 ```
 
-## プロジェクト構成
+## Project Structure
 
 ```
 cssh/
-├── Cargo.toml          # Workspace 定義
-├── cssh-common/        # 共通ライブラリ（プロトコル定義、エラー型）
-├── cssh-agent/         # ホスト側エージェント（TCP サーバー、コマンド実行）
-├── cssh-remote/        # リモート実行ファイル（TCP クライアント）
-├── cssh-cli/           # cssh コマンド本体（CLI 引数解析、SSH 接続、配置）
-└── e2e/                # E2E テスト（Docker SSH 環境）
+├── Cargo.toml          # Workspace definition
+├── cssh-common/        # Shared library (protocol definitions, error types)
+├── cssh-agent/         # Host-side agent (TCP server, command execution)
+├── cssh-remote/        # Remote executable (TCP client)
+├── cssh-cli/           # cssh CLI (argument parsing, SSH connection, deployment)
+└── e2e/                # E2E tests (Docker SSH environment)
 ```
 
-## テスト
+## Tests
 
 ```bash
-# 全テスト実行
+# Run all tests
 cargo test --workspace
 
-# E2E テスト（Docker 必須）
+# E2E tests (requires Docker)
 bash e2e/run_e2e.sh
 ```
 
-## ライセンス
+## License
 
 MIT
