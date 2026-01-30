@@ -1,7 +1,15 @@
 [package]
 name = "cssh-cli"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "SSH wrapper with host-side command execution via reverse port forwarding"
+readme = "README.md"
 
 [[bin]]
 name = "cssh"

@@ -1,3 +1,3 @@
 pub mod error;
-pub mod protocol;
 pub mod platform;
+pub mod protocol;

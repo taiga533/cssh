@@ -1,0 +1,43 @@
+name: Publish to crates.io
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  publish:
+    name: Publish Crates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish cssh-common
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p cssh-common
+
+      - name: Wait for cssh-common to be indexed
+        run: sleep 30
+
+      - name: Publish cssh-agent
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p cssh-agent
+
+      - name: Wait for cssh-agent to be indexed
+        run: sleep 30
+
+      - name: Publish cssh-remote
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p cssh-remote
+
+      - name: Wait for cssh-remote to be indexed
+        run: sleep 30
+
+      - name: Publish cssh-cli
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p cssh-cli

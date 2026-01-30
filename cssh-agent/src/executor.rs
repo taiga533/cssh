@@ -38,7 +38,12 @@ mod tests {
 
         #[cfg(target_family = "windows")]
         let request = ExecuteRequest {
-            args: vec!["cmd".to_string(), "/C".to_string(), "echo".to_string(), "hello".to_string()],
+            args: vec![
+                "cmd".to_string(),
+                "/C".to_string(),
+                "echo".to_string(),
+                "hello".to_string(),
+            ],
         };
 
         // Act
@@ -85,7 +90,12 @@ mod tests {
 
         #[cfg(target_family = "windows")]
         let request = ExecuteRequest {
-            args: vec!["cmd".to_string(), "/C".to_string(), "exit".to_string(), "1".to_string()],
+            args: vec![
+                "cmd".to_string(),
+                "/C".to_string(),
+                "exit".to_string(),
+                "1".to_string(),
+            ],
         };
 
         // Act

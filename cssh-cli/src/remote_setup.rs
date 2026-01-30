@@ -4,6 +4,7 @@ pub fn remote_install_dir() -> &'static str {
 }
 
 /// Remote binary name.
+#[allow(dead_code)]
 pub fn remote_binary_name() -> &'static str {
     "cexec"
 }
@@ -15,7 +16,7 @@ pub fn remote_binary_name() -> &'static str {
 /// 2. Add it to PATH in ~/.bashrc
 pub fn generate_setup_script() -> String {
     let install_dir = remote_install_dir();
-    let path_export = format!(r#"export PATH="$HOME/.cssh:$PATH""#);
+    let path_export = r#"export PATH="$HOME/.cssh:$PATH""#;
 
     // Unix/Linux shell script
     format!(

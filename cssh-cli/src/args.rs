@@ -66,10 +66,7 @@ pub fn parse_from(args: &[String]) -> Result<CsshArgs, String> {
 
         if arg == "--remote-name" {
             i += 1;
-            remote_name = args
-                .get(i)
-                .ok_or("--remote-name requires a value")?
-                .clone();
+            remote_name = args.get(i).ok_or("--remote-name requires a value")?.clone();
             validate_remote_name(&remote_name)?;
         } else if arg == "--listen-port" {
             i += 1;
@@ -147,13 +144,22 @@ mod tests {
 
         // Assert
         assert_eq!(result.destination, "user@host");
-        assert_eq!(result.ssh_options, s(&["-p", "2222", "-i", "~/.ssh/id_rsa"]));
+        assert_eq!(
+            result.ssh_options,
+            s(&["-p", "2222", "-i", "~/.ssh/id_rsa"])
+        );
     }
 
     #[test]
     fn parses_cssh_specific_options() {
         // Arrange
-        let args = s(&["--remote-name", "myexec", "--listen-port", "8080", "user@host"]);
+        let args = s(&[
+            "--remote-name",
+            "myexec",
+            "--listen-port",
+            "8080",
+            "user@host",
+        ]);
 
         // Act
         let result = parse_from(&args).unwrap();

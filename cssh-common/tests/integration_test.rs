@@ -107,7 +107,12 @@ mod windows_tests {
 
         // Act
         let request = ExecuteRequest {
-            args: vec!["cmd".to_string(), "/C".to_string(), "echo".to_string(), "integration test".to_string()],
+            args: vec![
+                "cmd".to_string(),
+                "/C".to_string(),
+                "echo".to_string(),
+                "integration test".to_string(),
+            ],
         };
         write_message(&mut writer, &request).await.unwrap();
         let response: ExecuteResponse = read_message(&mut reader).await.unwrap();
@@ -136,7 +141,12 @@ mod windows_tests {
 
         // Act & Assert - first
         let req1 = ExecuteRequest {
-            args: vec!["cmd".to_string(), "/C".to_string(), "echo".to_string(), "first".to_string()],
+            args: vec![
+                "cmd".to_string(),
+                "/C".to_string(),
+                "echo".to_string(),
+                "first".to_string(),
+            ],
         };
         write_message(&mut writer, &req1).await.unwrap();
         let resp1: ExecuteResponse = read_message(&mut reader).await.unwrap();
@@ -144,7 +154,12 @@ mod windows_tests {
 
         // Act & Assert - second
         let req2 = ExecuteRequest {
-            args: vec!["cmd".to_string(), "/C".to_string(), "echo".to_string(), "second".to_string()],
+            args: vec![
+                "cmd".to_string(),
+                "/C".to_string(),
+                "echo".to_string(),
+                "second".to_string(),
+            ],
         };
         write_message(&mut writer, &req2).await.unwrap();
         let resp2: ExecuteResponse = read_message(&mut reader).await.unwrap();
