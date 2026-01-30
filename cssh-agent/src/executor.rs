@@ -3,6 +3,9 @@ use cssh_common::protocol::{ExecuteRequest, ExecuteResponse};
 use std::process::Command;
 
 /// Execute a command based on the request and return the result.
+///
+/// On Windows, commands are executed via `cmd /C` so that `.cmd` and
+/// `.bat` scripts (e.g. VS Code's `code.cmd`) can be run directly.
 pub fn execute(request: &ExecuteRequest) -> Result<ExecuteResponse> {
     if request.args.is_empty() {
         return Ok(ExecuteResponse {
@@ -12,8 +15,7 @@ pub fn execute(request: &ExecuteRequest) -> Result<ExecuteResponse> {
         });
     }
 
-    let output = Command::new(&request.args[0])
-        .args(&request.args[1..])
+    let output = build_command(&request.args)
         .output()
         .map_err(|e| cssh_common::error::CsshError::Execution(e.to_string()))?;
 
@@ -24,6 +26,23 @@ pub fn execute(request: &ExecuteRequest) -> Result<ExecuteResponse> {
     })
 }
 
+/// Build a platform-appropriate Command from the given arguments.
+///
+/// On Windows, wraps all commands with `cmd /C` so that `.cmd` and `.bat`
+/// files can be executed without explicit `cmd /C` prefix.
+/// On Unix, executes the command directly.
+fn build_command(args: &[String]) -> Command {
+    if cfg!(target_os = "windows") {
+        let mut cmd = Command::new("cmd");
+        cmd.arg("/C").args(args);
+        cmd
+    } else {
+        let mut cmd = Command::new(&args[0]);
+        cmd.args(&args[1..]);
+        cmd
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -31,20 +50,8 @@ mod tests {
     #[test]
     fn echo_command_executes_correctly() {
         // Arrange
-        #[cfg(target_family = "unix")]
         let request = ExecuteRequest {
             args: vec!["echo".to_string(), "hello".to_string()],
-            token: String::new(),
-        };
-
-        #[cfg(target_family = "windows")]
-        let request = ExecuteRequest {
-            args: vec![
-                "cmd".to_string(),
-                "/C".to_string(),
-                "echo".to_string(),
-                "hello".to_string(),
-            ],
             token: String::new(),
         };
 
@@ -97,12 +104,7 @@ mod tests {
 
         #[cfg(target_family = "windows")]
         let request = ExecuteRequest {
-            args: vec![
-                "cmd".to_string(),
-                "/C".to_string(),
-                "exit".to_string(),
-                "1".to_string(),
-            ],
+            args: vec!["exit".to_string(), "1".to_string()],
             token: String::new(),
         };
 
@@ -111,5 +113,22 @@ mod tests {
 
         // Assert
         assert_ne!(response.exit_code, 0);
+    }
+
+    #[test]
+    fn build_command_creates_platform_appropriate_command() {
+        // Arrange
+        let args = vec!["echo".to_string(), "test".to_string()];
+
+        // Act
+        let cmd = build_command(&args);
+
+        // Assert
+        let program = cmd.get_program().to_string_lossy().to_string();
+        if cfg!(target_os = "windows") {
+            assert_eq!(program, "cmd");
+        } else {
+            assert_eq!(program, "echo");
+        }
     }
 }

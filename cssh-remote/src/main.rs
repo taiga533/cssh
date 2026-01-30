@@ -13,22 +13,26 @@ struct AgentInfo {
 /// and the authentication token on the second line.
 fn resolve_agent_info() -> Result<AgentInfo, String> {
     let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
-    let port_file = format!("{}/.cssh/agent_port", home);
+    let port_file = std::path::PathBuf::from(home).join(".cssh").join("agent_port");
     let content = std::fs::read_to_string(&port_file)
-        .map_err(|e| format!("failed to read {}: {}", port_file, e))?;
+        .map_err(|e| format!("failed to read {}: {}", port_file.display(), e))?;
+    parse_agent_info(&content, &port_file.to_string_lossy())
+}
+
+/// Parse agent info from the content of the port file.
+///
+/// The first line contains the port number, and the optional second line
+/// contains the authentication token.
+fn parse_agent_info(content: &str, path: &str) -> Result<AgentInfo, String> {
     let mut lines = content.lines();
     let port_str = lines
         .next()
-        .ok_or_else(|| format!("empty port file: {}", port_file))?;
+        .ok_or_else(|| format!("empty port file: {}", path))?;
     let port = port_str
         .trim()
         .parse::<u16>()
-        .map_err(|_| format!("invalid port in {}: '{}'", port_file, port_str.trim()))?;
-    let token = lines
-        .next()
-        .unwrap_or("")
-        .trim()
-        .to_string();
+        .map_err(|_| format!("invalid port in {}: '{}'", path, port_str.trim()))?;
+    let token = lines.next().unwrap_or("").trim().to_string();
     Ok(AgentInfo { port, token })
 }
 
@@ -65,91 +69,69 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
 
     #[test]
-    fn resolve_agent_info_reads_port_and_token_from_file() {
+    fn parse_agent_info_reads_port_and_token() {
         // Arrange
-        let fake_home = TempDir::new().unwrap();
-        let cssh_dir = fake_home.path().join(".cssh");
-        std::fs::create_dir_all(&cssh_dir).unwrap();
-        std::fs::write(cssh_dir.join("agent_port"), "54321\nabc123token\n").unwrap();
-
-        let original_home = std::env::var("HOME").unwrap();
-        std::env::set_var("HOME", fake_home.path().to_str().unwrap());
+        let content = "54321\nabc123token\n";
 
         // Act
-        let result = resolve_agent_info();
-
-        // Restore
-        std::env::set_var("HOME", &original_home);
+        let info = parse_agent_info(content, "test").unwrap();
 
         // Assert
-        let info = result.unwrap();
         assert_eq!(info.port, 54321);
         assert_eq!(info.token, "abc123token");
     }
 
     #[test]
-    fn resolve_agent_info_handles_port_only_file_for_backwards_compatibility() {
+    fn parse_agent_info_handles_port_only_for_backwards_compatibility() {
         // Arrange
-        let fake_home = TempDir::new().unwrap();
-        let cssh_dir = fake_home.path().join(".cssh");
-        std::fs::create_dir_all(&cssh_dir).unwrap();
-        std::fs::write(cssh_dir.join("agent_port"), "54321\n").unwrap();
-
-        let original_home = std::env::var("HOME").unwrap();
-        std::env::set_var("HOME", fake_home.path().to_str().unwrap());
+        let content = "54321\n";
 
         // Act
-        let result = resolve_agent_info();
-
-        // Restore
-        std::env::set_var("HOME", &original_home);
+        let info = parse_agent_info(content, "test").unwrap();
 
         // Assert
-        let info = result.unwrap();
         assert_eq!(info.port, 54321);
         assert_eq!(info.token, "");
     }
 
     #[test]
-    fn resolve_agent_info_returns_error_when_file_missing() {
+    fn parse_agent_info_returns_error_for_empty_content() {
         // Arrange
-        let fake_home = TempDir::new().unwrap();
-        let original_home = std::env::var("HOME").unwrap();
-        std::env::set_var("HOME", fake_home.path().to_str().unwrap());
+        let content = "";
 
         // Act
-        let result = resolve_agent_info();
-
-        // Restore
-        std::env::set_var("HOME", &original_home);
+        let result = parse_agent_info(content, "test");
 
         // Assert
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("failed to read"));
+        assert!(result.unwrap_err().contains("empty port file"));
     }
 
     #[test]
-    fn resolve_agent_info_returns_error_for_invalid_port() {
+    fn parse_agent_info_returns_error_for_invalid_port() {
         // Arrange
-        let fake_home = TempDir::new().unwrap();
-        let cssh_dir = fake_home.path().join(".cssh");
-        std::fs::create_dir_all(&cssh_dir).unwrap();
-        std::fs::write(cssh_dir.join("agent_port"), "not_a_number\n").unwrap();
-
-        let original_home = std::env::var("HOME").unwrap();
-        std::env::set_var("HOME", fake_home.path().to_str().unwrap());
+        let content = "not_a_number\n";
 
         // Act
-        let result = resolve_agent_info();
-
-        // Restore
-        std::env::set_var("HOME", &original_home);
+        let result = parse_agent_info(content, "test");
 
         // Assert
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("invalid port"));
+    }
+
+    #[test]
+    fn parse_agent_info_trims_whitespace() {
+        // Arrange
+        let content = "  12345  \n  mytoken  \n";
+
+        // Act
+        let info = parse_agent_info(content, "test").unwrap();
+
+        // Assert
+        assert_eq!(info.port, 12345);
+        assert_eq!(info.token, "mytoken");
     }
 }
