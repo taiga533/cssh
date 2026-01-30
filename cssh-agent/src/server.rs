@@ -37,7 +37,10 @@ async fn handle_connection(stream: tokio::net::TcpStream) -> Result<()> {
         let request: ExecuteRequest = match read_message(&mut reader).await {
             Ok(req) => req,
             Err(cssh_common::error::CsshError::Io(ref e))
-                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::ConnectionReset
+                ) =>
             {
                 info!("client disconnected");
                 return Ok(());

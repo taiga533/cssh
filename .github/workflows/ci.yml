@@ -93,4 +93,5 @@ jobs:
 
       - uses: cocogitto/cocogitto-action@9a9fe03b31c47444290c0d7f9b1ee1b44ee13f20 # v4.1.0
         with:
-          check-latest-tag-only: true
+          command: check
+          args: --from-latest-tag
