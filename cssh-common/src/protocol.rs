@@ -3,28 +3,28 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::error::{CsshError, Result};
 
-/// 最大メッセージサイズ（16MB）
+/// Maximum message size (16MB).
 const MAX_MESSAGE_SIZE: u32 = 16 * 1024 * 1024;
 
-/// コマンド実行リクエスト
+/// Command execution request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExecuteRequest {
-    /// 実行するコマンドと引数
+    /// Command and arguments to execute.
     pub args: Vec<String>,
 }
 
-/// コマンド実行レスポンス
+/// Command execution response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExecuteResponse {
-    /// 終了コード
+    /// Exit code.
     pub exit_code: i32,
-    /// 標準出力
+    /// Standard output.
     pub stdout: Vec<u8>,
-    /// 標準エラー出力
+    /// Standard error output.
     pub stderr: Vec<u8>,
 }
 
-/// 長さプレフィクス付きでメッセージをシリアライズしてバイト列を返す
+/// Serialize a message with a length prefix and return as bytes.
 pub fn encode_message<T: Serialize>(msg: &T) -> Result<Vec<u8>> {
     let json = serde_json::to_vec(msg)?;
     let len = json.len() as u32;
@@ -34,10 +34,10 @@ pub fn encode_message<T: Serialize>(msg: &T) -> Result<Vec<u8>> {
     Ok(buf)
 }
 
-/// 長さプレフィクス付きバイト列からメッセージをデシリアライズする
+/// Deserialize a message from length-prefixed bytes.
 pub fn decode_message<T: for<'de> Deserialize<'de>>(data: &[u8]) -> Result<(T, usize)> {
     if data.len() < 4 {
-        return Err(CsshError::Connection("データが短すぎます".to_string()));
+        return Err(CsshError::Connection("data too short".to_string()));
     }
     let len = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
     if len > MAX_MESSAGE_SIZE {
@@ -45,13 +45,13 @@ pub fn decode_message<T: for<'de> Deserialize<'de>>(data: &[u8]) -> Result<(T, u
     }
     let total = 4 + len as usize;
     if data.len() < total {
-        return Err(CsshError::Connection("データが不完全です".to_string()));
+        return Err(CsshError::Connection("incomplete data".to_string()));
     }
     let msg: T = serde_json::from_slice(&data[4..total])?;
     Ok((msg, total))
 }
 
-/// 非同期ストリームからメッセージを読み取る
+/// Read a message from an async stream.
 pub async fn read_message<T: for<'de> Deserialize<'de>, R: AsyncReadExt + Unpin>(
     reader: &mut R,
 ) -> Result<T> {
@@ -65,7 +65,7 @@ pub async fn read_message<T: for<'de> Deserialize<'de>, R: AsyncReadExt + Unpin>
     Ok(msg)
 }
 
-/// 非同期ストリームにメッセージを書き込む
+/// Write a message to an async stream.
 pub async fn write_message<T: Serialize, W: AsyncWriteExt + Unpin>(
     writer: &mut W,
     msg: &T,
@@ -83,7 +83,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn リクエストのシリアライズとデシリアライズが正しく動作する() {
+    fn request_serialization_and_deserialization_works_correctly() {
         // Arrange
         let request = ExecuteRequest {
             args: vec!["ls".to_string(), "-la".to_string()],
@@ -99,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn レスポンスのシリアライズとデシリアライズが正しく動作する() {
+    fn response_serialization_and_deserialization_works_correctly() {
         // Arrange
         let response = ExecuteResponse {
             exit_code: 0,
@@ -116,7 +116,7 @@ mod tests {
     }
 
     #[test]
-    fn データが短すぎる場合にエラーを返す() {
+    fn returns_error_when_data_is_too_short() {
         // Arrange
         let data = [0u8; 2];
 
@@ -128,7 +128,7 @@ mod tests {
     }
 
     #[test]
-    fn メッセージ長が上限を超える場合にエラーを返す() {
+    fn returns_error_when_message_length_exceeds_limit() {
         // Arrange
         let len = (MAX_MESSAGE_SIZE + 1).to_be_bytes();
         let data = [len[0], len[1], len[2], len[3]];
@@ -141,7 +141,7 @@ mod tests {
     }
 
     #[test]
-    fn データが不完全な場合にエラーを返す() {
+    fn returns_error_when_data_is_incomplete() {
         // Arrange
         let request = ExecuteRequest {
             args: vec!["test".to_string()],
@@ -157,7 +157,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn 非同期ストリームでメッセージの読み書きが正しく動作する() {
+    async fn async_stream_read_and_write_works_correctly() {
         // Arrange
         let request = ExecuteRequest {
             args: vec!["echo".to_string(), "hello".to_string()],

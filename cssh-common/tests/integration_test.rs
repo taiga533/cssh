@@ -1,7 +1,7 @@
 use cssh_common::protocol::{read_message, write_message, ExecuteRequest, ExecuteResponse};
 use tokio::net::{TcpListener, TcpStream};
 
-/// エージェントと同等のハンドラ（テスト用）
+/// Mock handler equivalent to the agent (for testing).
 async fn mock_agent_handler(stream: TcpStream) {
     let (mut reader, mut writer) = stream.into_split();
     loop {
@@ -23,7 +23,7 @@ async fn mock_agent_handler(stream: TcpStream) {
 }
 
 #[tokio::test]
-async fn エージェントとリモート間でコマンド実行が正しく動作する() {
+async fn command_execution_between_agent_and_remote_works_correctly() {
     // Arrange
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -52,7 +52,7 @@ async fn エージェントとリモート間でコマンド実行が正しく�
 }
 
 #[tokio::test]
-async fn 複数コマンドを連続実行できる() {
+async fn multiple_commands_can_be_executed_sequentially() {
     // Arrange
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -65,7 +65,7 @@ async fn 複数コマンドを連続実行できる() {
     let stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     let (mut reader, mut writer) = stream.into_split();
 
-    // Act & Assert - 1つ目
+    // Act & Assert - first
     let req1 = ExecuteRequest {
         args: vec!["echo".to_string(), "first".to_string()],
     };
@@ -73,7 +73,7 @@ async fn 複数コマンドを連続実行できる() {
     let resp1: ExecuteResponse = read_message(&mut reader).await.unwrap();
     assert_eq!(String::from_utf8_lossy(&resp1.stdout).trim(), "first");
 
-    // Act & Assert - 2つ目
+    // Act & Assert - second
     let req2 = ExecuteRequest {
         args: vec!["echo".to_string(), "second".to_string()],
     };

@@ -16,7 +16,7 @@ async fn main() {
         .unwrap_or(0);
 
     if let Err(e) = server::run(port).await {
-        eprintln!("エージェントエラー: {}", e);
+        eprintln!("agent error: {}", e);
         std::process::exit(1);
     }
 }

@@ -1,27 +1,27 @@
-/// cssh CLI引数の解析結果
+/// Parsed cssh CLI arguments.
 #[derive(Debug, Clone)]
 pub struct CsshArgs {
-    /// リモート実行可能ファイル名
+    /// Remote executable name.
     pub remote_name: String,
-    /// エージェントのリッスンポート（0=自動）
+    /// Agent listen port (0 = auto).
     pub listen_port: u16,
-    /// sshに渡すオプション引数（-p, -i等）
+    /// SSH option arguments passed through (-p, -i, etc.).
     pub ssh_options: Vec<String>,
-    /// 接続先 (user@host)
+    /// Destination (user@host).
     pub destination: String,
-    /// リモートで実行するコマンド（--の後）
+    /// Remote command to execute (after --).
     pub remote_command: Vec<String>,
 }
 
-/// CLI引数を解析する
+/// Parse CLI arguments.
 ///
-/// 書式: cssh [--remote-name NAME] [--listen-port PORT] [SSH_OPTIONS...] <destination> [-- <COMMAND...>]
+/// Format: cssh [--remote-name NAME] [--listen-port PORT] [SSH_OPTIONS...] <destination> [-- <COMMAND...>]
 pub fn parse() -> Result<CsshArgs, String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     parse_from(&args)
 }
 
-/// 指定された引数リストから解析する（テスト用）
+/// Parse from a given argument list (for testing).
 pub fn parse_from(args: &[String]) -> Result<CsshArgs, String> {
     let mut remote_name = "cexec".to_string();
     let mut listen_port: u16 = 0;
@@ -45,29 +45,29 @@ pub fn parse_from(args: &[String]) -> Result<CsshArgs, String> {
             i += 1;
             remote_name = args
                 .get(i)
-                .ok_or("--remote-name に値が必要です")?
+                .ok_or("--remote-name requires a value")?
                 .clone();
         } else if arg == "--listen-port" {
             i += 1;
             listen_port = args
                 .get(i)
-                .ok_or("--listen-port に値が必要です")?
+                .ok_or("--listen-port requires a value")?
                 .parse()
-                .map_err(|_| "--listen-port は数値で指定してください")?;
+                .map_err(|_| "--listen-port must be a number")?;
         } else if arg.starts_with('-') {
-            // sshオプション
+            // SSH options
             ssh_options.push(arg.clone());
-            // -p, -i, -l, -o 等は次の引数も値として取る
+            // -p, -i, -l, -o, etc. take the next argument as a value
             if matches!(arg.as_str(), "-p" | "-i" | "-l" | "-o" | "-F" | "-J" | "-W") {
                 i += 1;
                 ssh_options.push(
                     args.get(i)
-                        .ok_or(format!("{} に値が必要です", arg))?
+                        .ok_or(format!("{} requires a value", arg))?
                         .clone(),
                 );
             }
         } else {
-            // 接続先
+            // Destination
             destination = Some(arg.clone());
         }
 
@@ -78,7 +78,7 @@ pub fn parse_from(args: &[String]) -> Result<CsshArgs, String> {
         remote_command = args[i..].to_vec();
     }
 
-    let destination = destination.ok_or("接続先を指定してください")?;
+    let destination = destination.ok_or("destination is required")?;
 
     Ok(CsshArgs {
         remote_name,
@@ -98,7 +98,7 @@ mod tests {
     }
 
     #[test]
-    fn 基本的な引数を正しく解析する() {
+    fn parses_basic_arguments_correctly() {
         // Arrange
         let args = s(&["user@host"]);
 
@@ -114,7 +114,7 @@ mod tests {
     }
 
     #[test]
-    fn sshオプション付きの引数を解析する() {
+    fn parses_arguments_with_ssh_options() {
         // Arrange
         let args = s(&["-p", "2222", "-i", "~/.ssh/id_rsa", "user@host"]);
 
@@ -127,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn cssh独自オプションを解析する() {
+    fn parses_cssh_specific_options() {
         // Arrange
         let args = s(&["--remote-name", "myexec", "--listen-port", "8080", "user@host"]);
 
@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn セパレータ後のリモートコマンドを解析する() {
+    fn parses_remote_command_after_separator() {
         // Arrange
         let args = s(&["user@host", "--", "cat", "file.txt"]);
 
@@ -152,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn 接続先がない場合にエラーを返す() {
+    fn returns_error_when_destination_is_missing() {
         // Arrange
         let args = s(&["-p", "2222"]);
 

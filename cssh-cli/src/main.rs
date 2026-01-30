@@ -13,13 +13,13 @@ async fn main() {
     let cli_args = match args::parse() {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("引数エラー: {}", e);
+            eprintln!("argument error: {}", e);
             std::process::exit(1);
         }
     };
 
     if let Err(e) = ssh::run(cli_args).await {
-        eprintln!("cssh エラー: {}", e);
+        eprintln!("cssh error: {}", e);
         std::process::exit(1);
     }
 }

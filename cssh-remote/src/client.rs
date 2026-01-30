@@ -2,7 +2,7 @@ use cssh_common::error::Result;
 use cssh_common::protocol::{read_message, write_message, ExecuteRequest, ExecuteResponse};
 use tokio::net::TcpStream;
 
-/// エージェントに接続してコマンドを実行し、レスポンスを返す
+/// Connect to the agent, execute a command, and return the response.
 pub async fn execute(port: u16, args: Vec<String>) -> Result<ExecuteResponse> {
     let stream = TcpStream::connect(("127.0.0.1", port)).await?;
     let (mut reader, mut writer) = stream.into_split();
@@ -20,7 +20,7 @@ mod tests {
     use tokio::net::TcpListener;
 
     #[tokio::test]
-    async fn エージェントにコマンドを送信してレスポンスを受け取る() {
+    async fn sends_command_to_agent_and_receives_response() {
         // Arrange
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -46,8 +46,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn 接続失敗時にエラーを返す() {
-        // Arrange - 存在しないポートに接続
+    async fn returns_error_on_connection_failure() {
+        // Arrange - connect to a non-existent port
         // Act
         let result = execute(19999, vec!["test".to_string()]).await;
 

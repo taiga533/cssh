@@ -2,7 +2,7 @@ use cssh_common::error::Result;
 use cssh_common::protocol::{ExecuteRequest, ExecuteResponse};
 use std::process::Command;
 
-/// リクエストに基づいてコマンドを実行し、結果を返す
+/// Execute a command based on the request and return the result.
 pub fn execute(request: &ExecuteRequest) -> Result<ExecuteResponse> {
     if request.args.is_empty() {
         return Ok(ExecuteResponse {
@@ -29,7 +29,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn echoコマンドが正しく実行される() {
+    fn echo_command_executes_correctly() {
         // Arrange
         let request = ExecuteRequest {
             args: vec!["echo".to_string(), "hello".to_string()],
@@ -44,7 +44,7 @@ mod tests {
     }
 
     #[test]
-    fn 存在しないコマンドでエラーを返す() {
+    fn returns_error_for_nonexistent_command() {
         // Arrange
         let request = ExecuteRequest {
             args: vec!["nonexistent_command_xyz".to_string()],
@@ -58,7 +58,7 @@ mod tests {
     }
 
     #[test]
-    fn 空のargsでエラーレスポンスを返す() {
+    fn returns_error_response_for_empty_args() {
         // Arrange
         let request = ExecuteRequest { args: vec![] };
 
@@ -70,7 +70,7 @@ mod tests {
     }
 
     #[test]
-    fn 終了コード非ゼロのコマンドが正しく処理される() {
+    fn nonzero_exit_code_is_handled_correctly() {
         // Arrange
         let request = ExecuteRequest {
             args: vec!["false".to_string()],

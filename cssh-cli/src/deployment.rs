@@ -2,39 +2,39 @@ use std::process::Command;
 
 use crate::args::CsshArgs;
 
-/// リモートにcssh-remoteバイナリを配置する
+/// Deploy the cssh-remote binary to the remote host.
 ///
-/// 1. リモートの~/.cssh/にバイナリが存在するか確認
-/// 2. 存在しない場合のみSCPで配置
+/// 1. Check if the binary already exists at ~/.cssh/ on the remote
+/// 2. Deploy via SCP only if it does not exist
 pub fn deploy_remote_binary(args: &CsshArgs) -> Result<(), String> {
     let remote_bin_path = format!(".cssh/{}", args.remote_name);
 
-    // リモートにバイナリが存在するか確認
+    // Check if the binary exists on the remote
     if check_remote_binary_exists(args, &remote_bin_path)? {
-        tracing::info!("リモートバイナリが既に存在します");
+        tracing::info!("remote binary already exists");
         return Ok(());
     }
 
-    // ローカルのcssh-remoteバイナリパスを取得
+    // Find the local cexec binary path
     let local_bin = find_local_binary()?;
 
-    // リモートに~/.cssh/ディレクトリを作成
+    // Create ~/.cssh/ directory on the remote
     create_remote_directory(args)?;
 
-    // SCPで配置
+    // Deploy via SCP
     scp_to_remote(args, &local_bin, &remote_bin_path)?;
 
-    // 実行権限を付与
+    // Set executable permission
     set_remote_executable(args, &remote_bin_path)?;
 
-    // ~/.bashrcにPATH追加（まだ追加されていない場合のみ）
+    // Add ~/.cssh/ to PATH in ~/.bashrc (only if not already added)
     setup_remote_path(args)?;
 
-    tracing::info!("リモートバイナリを配置しました");
+    tracing::info!("remote binary deployed");
     Ok(())
 }
 
-/// リモートにバイナリが存在するか確認する
+/// Check if the binary exists on the remote.
 fn check_remote_binary_exists(args: &CsshArgs, remote_path: &str) -> Result<bool, String> {
     let mut cmd = Command::new("ssh");
     for opt in &args.ssh_options {
@@ -45,28 +45,28 @@ fn check_remote_binary_exists(args: &CsshArgs, remote_path: &str) -> Result<bool
 
     let status = cmd
         .status()
-        .map_err(|e| format!("ssh実行失敗: {}", e))?;
+        .map_err(|e| format!("failed to run ssh: {}", e))?;
     Ok(status.success())
 }
 
-/// ローカルのcssh-remoteバイナリを探す
+/// Find the local cexec binary.
 fn find_local_binary() -> Result<String, String> {
-    // 実行中のバイナリと同じディレクトリにあるcssh-remoteを探す
+    // Look for cexec in the same directory as the running binary
     let current_exe = std::env::current_exe()
-        .map_err(|e| format!("現在の実行ファイルパス取得失敗: {}", e))?;
+        .map_err(|e| format!("failed to get current exe path: {}", e))?;
     let dir = current_exe
         .parent()
-        .ok_or("親ディレクトリが取得できません")?;
+        .ok_or("failed to get parent directory")?;
     let remote_bin = dir.join("cexec");
 
     if remote_bin.exists() {
         return Ok(remote_bin.to_string_lossy().to_string());
     }
 
-    Err("cexecバイナリが見つかりません".to_string())
+    Err("cexec binary not found".to_string())
 }
 
-/// リモートに~/.cssh/ディレクトリを作成する
+/// Create the ~/.cssh/ directory on the remote.
 fn create_remote_directory(args: &CsshArgs) -> Result<(), String> {
     let mut cmd = Command::new("ssh");
     for opt in &args.ssh_options {
@@ -76,18 +76,18 @@ fn create_remote_directory(args: &CsshArgs) -> Result<(), String> {
 
     let status = cmd
         .status()
-        .map_err(|e| format!("リモートディレクトリ作成失敗: {}", e))?;
+        .map_err(|e| format!("failed to create remote directory: {}", e))?;
 
     if !status.success() {
-        return Err("リモートディレクトリ作成に失敗しました".to_string());
+        return Err("failed to create remote directory".to_string());
     }
     Ok(())
 }
 
-/// SCPでファイルをリモートに送信する
+/// Send a file to the remote via SCP.
 fn scp_to_remote(args: &CsshArgs, local_path: &str, remote_path: &str) -> Result<(), String> {
     let mut cmd = Command::new("scp");
-    // sshオプションをscpに変換して転送（-p → -P）
+    // Convert SSH options for SCP (-p -> -P)
     let mut iter = args.ssh_options.iter();
     while let Some(opt) = iter.next() {
         if opt == "-p" {
@@ -104,15 +104,15 @@ fn scp_to_remote(args: &CsshArgs, local_path: &str, remote_path: &str) -> Result
 
     let status = cmd
         .status()
-        .map_err(|e| format!("scp実行失敗: {}", e))?;
+        .map_err(|e| format!("failed to run scp: {}", e))?;
 
     if !status.success() {
-        return Err("SCPによるファイル転送に失敗しました".to_string());
+        return Err("SCP file transfer failed".to_string());
     }
     Ok(())
 }
 
-/// リモートファイルに実行権限を付与する
+/// Set executable permission on a remote file.
 fn set_remote_executable(args: &CsshArgs, remote_path: &str) -> Result<(), String> {
     let mut cmd = Command::new("ssh");
     for opt in &args.ssh_options {
@@ -123,15 +123,15 @@ fn set_remote_executable(args: &CsshArgs, remote_path: &str) -> Result<(), Strin
 
     let status = cmd
         .status()
-        .map_err(|e| format!("chmod実行失敗: {}", e))?;
+        .map_err(|e| format!("failed to run chmod: {}", e))?;
 
     if !status.success() {
-        return Err("実行権限の付与に失敗しました".to_string());
+        return Err("failed to set executable permission".to_string());
     }
     Ok(())
 }
 
-/// リモートの~/.bashrcにPATH追加を設定する
+/// Add ~/.cssh/ to PATH in the remote ~/.bashrc.
 fn setup_remote_path(args: &CsshArgs) -> Result<(), String> {
     let mut cmd = Command::new("ssh");
     for opt in &args.ssh_options {
@@ -143,10 +143,10 @@ fn setup_remote_path(args: &CsshArgs) -> Result<(), String> {
 
     let status = cmd
         .status()
-        .map_err(|e| format!("PATH設定失敗: {}", e))?;
+        .map_err(|e| format!("failed to setup PATH: {}", e))?;
 
     if !status.success() {
-        return Err("PATH設定に失敗しました".to_string());
+        return Err("failed to setup PATH".to_string());
     }
     Ok(())
 }
@@ -156,14 +156,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ローカルバイナリが見つからない場合にエラーを返す() {
+    fn find_local_binary_does_not_panic() {
         // Act
-        // 通常テスト環境ではcssh-remoteはビルドディレクトリに存在する可能性があるが、
-        // find_local_binaryの動作を確認するためのテスト
+        // In test environments, cexec may or may not exist in the build directory.
+        // This test verifies that find_local_binary does not panic.
         let result = find_local_binary();
 
-        // Assert - ビルド済みなら成功、なければエラー（どちらもOK）
-        // このテストはfind_local_binaryがパニックしないことを確認
+        // Assert - success if built, error otherwise (both are OK)
         let _ = result;
     }
 }

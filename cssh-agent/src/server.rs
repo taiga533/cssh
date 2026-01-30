@@ -5,31 +5,31 @@ use tracing::{error, info};
 
 use crate::executor;
 
-/// エージェントサーバーを指定ポートで起動する
+/// Start the agent server on the specified port.
 pub async fn run(port: u16) -> Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", port)).await?;
     let local_addr = listener.local_addr()?;
-    // ポート番号を標準出力に出力（親プロセスが読み取る。必ずログより先に出力する）
+    // Output port number to stdout (read by parent process; must precede log output)
     println!("{}", local_addr.port());
-    info!("エージェント起動: {}", local_addr);
+    info!("agent started: {}", local_addr);
 
     loop {
         let (stream, addr) = listener.accept().await?;
-        info!("接続受付: {}", addr);
+        info!("connection accepted: {}", addr);
         tokio::spawn(async move {
             if let Err(e) = handle_connection(stream).await {
-                error!("接続処理エラー: {}", e);
+                error!("connection handler error: {}", e);
             }
         });
     }
 }
 
-/// 自動割り当てポートでサーバーを起動する
+/// Start the server with an auto-assigned port.
 pub async fn run_auto_port() -> Result<()> {
     run(0).await
 }
 
-/// 1つの接続を処理する
+/// Handle a single connection.
 async fn handle_connection(stream: tokio::net::TcpStream) -> Result<()> {
     let (mut reader, mut writer) = stream.into_split();
 
@@ -39,13 +39,13 @@ async fn handle_connection(stream: tokio::net::TcpStream) -> Result<()> {
             Err(cssh_common::error::CsshError::Io(ref e))
                 if e.kind() == std::io::ErrorKind::UnexpectedEof =>
             {
-                info!("クライアント切断");
+                info!("client disconnected");
                 return Ok(());
             }
             Err(e) => return Err(e),
         };
 
-        info!("コマンド実行: {:?}", request.args);
+        info!("executing command: {:?}", request.args);
         let response = executor::execute(&request).unwrap_or_else(|e| ExecuteResponse {
             exit_code: 1,
             stdout: Vec::new(),
@@ -63,7 +63,7 @@ mod tests {
     use tokio::net::TcpStream;
 
     #[tokio::test]
-    async fn サーバーがコマンドを実行してレスポンスを返す() {
+    async fn server_executes_command_and_returns_response() {
         // Arrange
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -90,7 +90,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn クライアント切断時にサーバーが正常終了する() {
+    async fn server_terminates_gracefully_on_client_disconnect() {
         // Arrange
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -102,7 +102,7 @@ mod tests {
 
         // Act
         let stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-        drop(stream); // 即切断
+        drop(stream); // disconnect immediately
 
         // Assert
         let result = handle.await.unwrap();

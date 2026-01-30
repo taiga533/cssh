@@ -1,19 +1,19 @@
-/// cssh共通エラー型
+/// Common error type for cssh.
 #[derive(Debug, thiserror::Error)]
 pub enum CsshError {
-    #[error("IOエラー: {0}")]
+    #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("シリアライズエラー: {0}")]
+    #[error("Serialization error: {0}")]
     Serialize(#[from] serde_json::Error),
 
-    #[error("不正なメッセージ長: {0}")]
+    #[error("Invalid message length: {0}")]
     InvalidMessageLength(u32),
 
-    #[error("接続エラー: {0}")]
+    #[error("Connection error: {0}")]
     Connection(String),
 
-    #[error("コマンド実行エラー: {0}")]
+    #[error("Command execution error: {0}")]
     Execution(String),
 }
 

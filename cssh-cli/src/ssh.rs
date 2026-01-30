@@ -4,25 +4,25 @@ use std::process::{Child, Command, Stdio};
 use crate::args::CsshArgs;
 use crate::deployment;
 
-/// csshのメイン処理を実行する
+/// Run the main cssh workflow.
 ///
-/// 1. エージェントをバックグラウンドで起動
-/// 2. リモートにcssh-remoteを配置
-/// 3. SSH接続（逆ポートフォワーディング付き）
+/// 1. Start the agent in the background
+/// 2. Deploy cssh-remote to the remote host
+/// 3. Open SSH connection with reverse port forwarding
 pub async fn run(args: CsshArgs) -> Result<(), String> {
-    // エージェント起動
+    // Start the agent
     let (agent_process, agent_port) = start_agent(&args)?;
-    tracing::info!("エージェント起動: ポート {}", agent_port);
+    tracing::info!("agent started: port {}", agent_port);
 
-    // リモートバイナリ配置
+    // Deploy remote binary
     if let Err(e) = deployment::deploy_remote_binary(&args) {
-        tracing::warn!("リモートバイナリ配置スキップ: {}", e);
+        tracing::warn!("remote binary deployment skipped: {}", e);
     }
 
-    // SSH接続
+    // SSH connection
     let exit_code = run_ssh(&args, agent_port)?;
 
-    // エージェント停止
+    // Stop the agent
     drop(agent_process);
 
     if exit_code != 0 {
@@ -31,11 +31,11 @@ pub async fn run(args: CsshArgs) -> Result<(), String> {
     Ok(())
 }
 
-/// エージェントプロセスをバックグラウンドで起動し、割り当てられたポートを返す
+/// Start the agent process in the background and return the assigned port.
 fn start_agent(args: &CsshArgs) -> Result<(AgentGuard, u16), String> {
     let port_arg = args.listen_port.to_string();
 
-    // 自分と同じディレクトリのcssh-agentを探す
+    // Find cssh-agent in the same directory
     let agent_bin = find_agent_binary()?;
 
     let mut child = Command::new(&agent_bin)
@@ -43,63 +43,63 @@ fn start_agent(args: &CsshArgs) -> Result<(AgentGuard, u16), String> {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| format!("エージェント起動失敗: {}", e))?;
+        .map_err(|e| format!("failed to start agent: {}", e))?;
 
-    // エージェントが出力するポート番号を読み取る
-    let stdout = child.stdout.take().ok_or("エージェントの標準出力を取得できません")?;
+    // Read the port number output by the agent
+    let stdout = child.stdout.take().ok_or("failed to get agent stdout")?;
     let mut reader = BufReader::new(stdout);
     let mut port_line = String::new();
     reader
         .read_line(&mut port_line)
-        .map_err(|e| format!("ポート読み取り失敗: {}", e))?;
+        .map_err(|e| format!("failed to read port: {}", e))?;
 
     let port: u16 = port_line
         .trim()
         .parse()
-        .map_err(|_| format!("不正なポート番号: '{}'", port_line.trim()))?;
+        .map_err(|_| format!("invalid port number: '{}'", port_line.trim()))?;
 
     Ok((AgentGuard(child), port))
 }
 
-/// エージェントバイナリを探す
+/// Find the agent binary.
 fn find_agent_binary() -> Result<String, String> {
     let current_exe =
-        std::env::current_exe().map_err(|e| format!("現在の実行ファイルパス取得失敗: {}", e))?;
+        std::env::current_exe().map_err(|e| format!("failed to get current exe path: {}", e))?;
     let dir = current_exe
         .parent()
-        .ok_or("親ディレクトリが取得できません")?;
+        .ok_or("failed to get parent directory")?;
     let agent_bin = dir.join("cssh-agent");
 
     if agent_bin.exists() {
         return Ok(agent_bin.to_string_lossy().to_string());
     }
 
-    Err("cssh-agentバイナリが見つかりません".to_string())
+    Err("cssh-agent binary not found".to_string())
 }
 
-/// SSH接続を実行し、終了コードを返す
+/// Run SSH connection and return the exit code.
 fn run_ssh(args: &CsshArgs, agent_port: u16) -> Result<i32, String> {
     let mut cmd = Command::new("ssh");
 
-    // 逆ポートフォワーディング: リモートのポートをローカルのエージェントポートに接続
+    // Reverse port forwarding: connect the remote port to the local agent port
     cmd.arg("-R")
         .arg(format!("{}:127.0.0.1:{}", agent_port, agent_port));
 
-    // CSSH_PORT環境変数をリモートに送信
+    // Send CSSH_PORT environment variable to the remote
     cmd.arg("-o")
         .arg("SendEnv=CSSH_PORT")
         .arg("-o")
         .arg(format!("SetEnv=CSSH_PORT={}", agent_port));
 
-    // ユーザー指定のsshオプション
+    // User-specified SSH options
     for opt in &args.ssh_options {
         cmd.arg(opt);
     }
 
-    // 接続先
+    // Destination
     cmd.arg(&args.destination);
 
-    // リモートコマンド
+    // Remote command
     if !args.remote_command.is_empty() {
         for c in &args.remote_command {
             cmd.arg(c);
@@ -108,12 +108,12 @@ fn run_ssh(args: &CsshArgs, agent_port: u16) -> Result<i32, String> {
 
     let status = cmd
         .status()
-        .map_err(|e| format!("SSH実行失敗: {}", e))?;
+        .map_err(|e| format!("failed to run ssh: {}", e))?;
 
     Ok(status.code().unwrap_or(1))
 }
 
-/// エージェントプロセスのドロップ時に自動終了するガード
+/// Guard that automatically kills the agent process on drop.
 struct AgentGuard(Child);
 
 impl Drop for AgentGuard {
@@ -128,8 +128,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn エージェントバイナリが存在しない場合にエラーを返す() {
-        // find_agent_binaryがパニックしないことを確認
+    fn find_agent_binary_does_not_panic() {
+        // Verify that find_agent_binary does not panic
         let _ = find_agent_binary();
     }
 }
