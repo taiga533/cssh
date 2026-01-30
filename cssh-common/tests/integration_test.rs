@@ -119,10 +119,10 @@ mod windows_tests {
 
         // Assert
         assert_eq!(response.exit_code, 0);
-        assert_eq!(
-            String::from_utf8_lossy(&response.stdout).trim(),
-            "integration test"
-        );
+        let stdout = String::from_utf8_lossy(&response.stdout).trim().to_string();
+        // Windows cmd.exe wraps multi-word echo arguments in double quotes
+        let stdout = stdout.trim_matches('"');
+        assert_eq!(stdout, "integration test");
     }
 
     #[tokio::test]
