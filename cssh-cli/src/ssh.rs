@@ -7,13 +7,17 @@ use cssh_common::platform;
 
 /// Run the main cssh workflow.
 ///
-/// 1. Start the agent in the background
-/// 2. Deploy cssh-remote to the remote host
-/// 3. Write agent port to a file on the remote host
-/// 4. Open SSH connection with reverse port forwarding
+/// 1. Generate authentication token
+/// 2. Start the agent in the background
+/// 3. Deploy cssh-remote to the remote host
+/// 4. Write agent port and token to a file on the remote host
+/// 5. Open SSH connection with reverse port forwarding
 pub async fn run(args: CsshArgs) -> Result<(), String> {
+    // Generate authentication token
+    let token = generate_token();
+
     // Start the agent
-    let (agent_process, agent_port) = start_agent(&args)?;
+    let (agent_process, agent_port) = start_agent(&args, &token)?;
     tracing::info!("agent started: port {}", agent_port);
 
     // Deploy remote binary
@@ -21,8 +25,8 @@ pub async fn run(args: CsshArgs) -> Result<(), String> {
         tracing::warn!("remote binary deployment skipped: {}", e);
     }
 
-    // Write agent port to file on remote
-    write_remote_port_file(&args, agent_port)?;
+    // Write agent port and token to file on remote
+    write_remote_port_file(&args, agent_port, &token)?;
 
     // SSH connection
     let exit_code = run_ssh(&args, agent_port)?;
@@ -36,8 +40,15 @@ pub async fn run(args: CsshArgs) -> Result<(), String> {
     Ok(())
 }
 
+/// Generate a random 32-byte hex authentication token (64 characters).
+fn generate_token() -> String {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).expect("failed to generate random token");
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
 /// Start the agent process in the background and return the assigned port.
-fn start_agent(args: &CsshArgs) -> Result<(AgentGuard, u16), String> {
+fn start_agent(args: &CsshArgs, token: &str) -> Result<(AgentGuard, u16), String> {
     let port_arg = args.listen_port.to_string();
 
     // Find cssh-agent in the same directory
@@ -45,6 +56,7 @@ fn start_agent(args: &CsshArgs) -> Result<(AgentGuard, u16), String> {
 
     let mut child = Command::new(&agent_bin)
         .arg(&port_arg)
+        .arg(token)
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
@@ -103,18 +115,19 @@ fn run_ssh(args: &CsshArgs, agent_port: u16) -> Result<i32, String> {
     Ok(status.code().unwrap_or(1))
 }
 
-/// Write the agent port number to a file on the remote host.
+/// Write the agent port number and token to a file on the remote host.
 ///
-/// Creates `~/.cssh/agent_port` containing the port number so that
-/// cexec can discover the agent without environment variables or
-/// Unix domain socket forwarding.
-fn write_remote_port_file(args: &CsshArgs, port: u16) -> Result<(), String> {
+/// Creates `~/.cssh/agent_port` containing the port and token (one per line)
+/// with permissions 600 so that cexec can discover the agent securely.
+fn write_remote_port_file(args: &CsshArgs, port: u16, token: &str) -> Result<(), String> {
     let mut cmd = Command::new("ssh");
     for opt in &args.ssh_options {
         cmd.arg(opt);
     }
-    cmd.arg(&args.destination)
-        .arg(format!("mkdir -p ~/.cssh && echo {} > ~/.cssh/agent_port", port));
+    cmd.arg(&args.destination).arg(format!(
+        "mkdir -p ~/.cssh && printf '%s\\n%s\\n' '{}' '{}' > ~/.cssh/agent_port && chmod 600 ~/.cssh/agent_port",
+        port, token
+    ));
     let status = cmd
         .status()
         .map_err(|e| format!("failed to write port file: {}", e))?;
@@ -142,5 +155,25 @@ mod tests {
     fn find_agent_binary_does_not_panic() {
         // Verify that find_agent_binary does not panic
         let _ = find_agent_binary();
+    }
+
+    #[test]
+    fn generate_token_returns_64_char_hex_string() {
+        // Act
+        let token = generate_token();
+
+        // Assert
+        assert_eq!(token.len(), 64);
+        assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn generate_token_produces_unique_values() {
+        // Act
+        let token1 = generate_token();
+        let token2 = generate_token();
+
+        // Assert
+        assert_ne!(token1, token2);
     }
 }

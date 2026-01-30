@@ -142,6 +142,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "cssh-common",
+ "getrandom",
  "thiserror",
  "tokio",
  "tracing",

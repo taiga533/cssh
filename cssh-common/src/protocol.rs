@@ -11,6 +11,9 @@ const MAX_MESSAGE_SIZE: u32 = 16 * 1024 * 1024;
 pub struct ExecuteRequest {
     /// Command and arguments to execute.
     pub args: Vec<String>,
+    /// Authentication token for agent verification.
+    #[serde(default)]
+    pub token: String,
 }
 
 /// Command execution response.
@@ -87,6 +90,7 @@ mod tests {
         // Arrange
         let request = ExecuteRequest {
             args: vec!["ls".to_string(), "-la".to_string()],
+            token: "abc123".to_string(),
         };
 
         // Act
@@ -113,6 +117,23 @@ mod tests {
 
         // Assert
         assert_eq!(decoded, response);
+    }
+
+    #[test]
+    fn request_deserialization_without_token_defaults_to_empty() {
+        // Arrange
+        let json = r#"{"args":["ls"]}"#;
+        let len = json.len() as u32;
+        let mut data = Vec::new();
+        data.extend_from_slice(&len.to_be_bytes());
+        data.extend_from_slice(json.as_bytes());
+
+        // Act
+        let (decoded, _): (ExecuteRequest, usize) = decode_message(&data).unwrap();
+
+        // Assert
+        assert_eq!(decoded.args, vec!["ls".to_string()]);
+        assert_eq!(decoded.token, "");
     }
 
     #[test]
@@ -145,6 +166,7 @@ mod tests {
         // Arrange
         let request = ExecuteRequest {
             args: vec!["test".to_string()],
+            token: String::new(),
         };
         let encoded = encode_message(&request).unwrap();
         let incomplete = &encoded[..encoded.len() - 2];
@@ -161,6 +183,7 @@ mod tests {
         // Arrange
         let request = ExecuteRequest {
             args: vec!["echo".to_string(), "hello".to_string()],
+            token: String::new(),
         };
         let mut buf = Vec::new();
 

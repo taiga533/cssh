@@ -34,6 +34,7 @@ mod tests {
         #[cfg(target_family = "unix")]
         let request = ExecuteRequest {
             args: vec!["echo".to_string(), "hello".to_string()],
+            token: String::new(),
         };
 
         #[cfg(target_family = "windows")]
@@ -44,6 +45,7 @@ mod tests {
                 "echo".to_string(),
                 "hello".to_string(),
             ],
+            token: String::new(),
         };
 
         // Act
@@ -59,6 +61,7 @@ mod tests {
         // Arrange
         let request = ExecuteRequest {
             args: vec!["nonexistent_command_xyz".to_string()],
+            token: String::new(),
         };
 
         // Act
@@ -71,7 +74,10 @@ mod tests {
     #[test]
     fn returns_error_response_for_empty_args() {
         // Arrange
-        let request = ExecuteRequest { args: vec![] };
+        let request = ExecuteRequest {
+            args: vec![],
+            token: String::new(),
+        };
 
         // Act
         let response = execute(&request).unwrap();
@@ -86,6 +92,7 @@ mod tests {
         #[cfg(target_family = "unix")]
         let request = ExecuteRequest {
             args: vec!["false".to_string()],
+            token: String::new(),
         };
 
         #[cfg(target_family = "windows")]
@@ -96,6 +103,7 @@ mod tests {
                 "exit".to_string(),
                 "1".to_string(),
             ],
+            token: String::new(),
         };
 
         // Act
