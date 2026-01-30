@@ -22,7 +22,6 @@ pub fn executable_extension() -> &'static str {
 /// On Windows, automatically appends the ".exe" extension.
 /// On Unix, searches for the exact name.
 pub fn find_binary(binary_name: &str) -> Result<PathBuf> {
-    // First, check if the binary exists in the current directory
     let exe_ext = executable_extension();
     let binary_with_ext = format!("{}{}", binary_name, exe_ext);
 
@@ -49,6 +48,60 @@ pub fn find_binary(binary_name: &str) -> Result<PathBuf> {
 
     Err(CsshError::Execution(format!(
         "{} binary not found",
+        binary_name
+    )))
+}
+
+/// Find a binary intended for a remote Linux host.
+///
+/// When the local host is Windows, the remote binary (e.g. `cexec`) is a
+/// Linux ELF binary without `.exe` extension. This function searches for the
+/// binary name without any platform-specific extension, looking in:
+///   1. The same directory as the current executable
+///   2. Directories listed in the PATH environment variable
+///
+/// On Unix hosts this behaves identically to [`find_binary`].
+pub fn find_remote_binary(binary_name: &str) -> Result<PathBuf> {
+    let current_exe = std::env::current_exe()
+        .map_err(|e| CsshError::Execution(format!("failed to get current exe path: {}", e)))?;
+    let dir = current_exe
+        .parent()
+        .ok_or_else(|| CsshError::Execution("failed to get parent directory".to_string()))?;
+
+    // Search without platform extension (remote is always Linux)
+    let local_binary = dir.join(binary_name);
+    if local_binary.exists() {
+        return Ok(local_binary);
+    }
+
+    // On Windows, also check with .exe extension as a fallback.
+    // Users may cross-compile and place the Linux binary without extension,
+    // but if only the .exe build exists we should still find it so the error
+    // message is more helpful.
+    #[cfg(target_family = "windows")]
+    {
+        let with_exe = dir.join(format!("{}.exe", binary_name));
+        if with_exe.exists() {
+            return Err(CsshError::Execution(format!(
+                "{0} Linux binary not found (found {0}.exe which is a Windows binary; \
+                 cross-compile for Linux and place the resulting binary next to cssh.exe)",
+                binary_name
+            )));
+        }
+    }
+
+    // Search in PATH
+    if let Ok(path_var) = std::env::var("PATH") {
+        for path_str in std::env::split_paths(&path_var) {
+            let path = path_str.join(binary_name);
+            if path.exists() {
+                return Ok(path);
+            }
+        }
+    }
+
+    Err(CsshError::Execution(format!(
+        "{} Linux binary not found",
         binary_name
     )))
 }
@@ -142,5 +195,11 @@ mod tests {
     fn make_executable_does_not_panic() {
         let path = std::path::Path::new("/tmp/nonexistent_file");
         let _ = make_executable(path);
+    }
+
+    #[test]
+    fn find_remote_binary_does_not_panic() {
+        // find_remote_binary always searches without platform extension
+        let _ = find_remote_binary("cexec");
     }
 }

@@ -22,7 +22,46 @@ A CLI tool that wraps SSH and automatically starts a host-side agent on connecti
 
 ## Installation
 
+### Linux / macOS
+
 ```bash
+cargo build --release
+```
+
+### Windows
+
+Windows 10/11 is supported. The remote host must be Linux/Unix.
+
+**Prerequisites:**
+
+One of the following C toolchains is required:
+
+- **Visual Studio Build Tools (MSVC)** — Download [Build Tools for Visual Studio](https://visualstudio.microsoft.com/downloads/) and select "Desktop development with C++" during installation.
+- **MinGW (GNU)** — Install via [Scoop](https://scoop.sh/) or [Chocolatey](https://chocolatey.org/):
+
+  ```powershell
+  # Scoop
+  scoop install mingw
+
+  # Chocolatey
+  choco install mingw
+  ```
+
+  Then switch Rust to the GNU toolchain:
+
+  ```powershell
+  rustup default stable-gnu
+  ```
+
+OpenSSH Client is also required (included by default in Windows 10 1809+). Verify with:
+
+```powershell
+ssh -V
+```
+
+Build:
+
+```powershell
 cargo build --release
 ```
 
@@ -30,14 +69,20 @@ Build artifacts are generated in `target/release/`:
 
 | Binary | Description |
 |---|---|
-| `cssh` | CLI entry point |
-| `cssh-agent` | Host-side agent |
-| `cexec` | Remote executable |
+| `cssh` (`cssh.exe` on Windows) | CLI entry point |
+| `cssh-agent` (`cssh-agent.exe` on Windows) | Host-side agent |
+| `cexec` (`cexec.exe` on Windows) | Remote executable |
 
 Place all three binaries in the same directory and add it to your PATH.
 
 ```bash
+# Linux / macOS
 export PATH="$(pwd)/target/release:$PATH"
+```
+
+```powershell
+# Windows (PowerShell)
+$env:PATH = "$(Get-Location)\target\release;$env:PATH"
 ```
 
 ## Usage

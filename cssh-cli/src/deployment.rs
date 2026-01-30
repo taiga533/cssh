@@ -52,9 +52,12 @@ fn check_remote_binary_exists(args: &CsshArgs, remote_path: &str) -> Result<bool
     Ok(status.success())
 }
 
-/// Find the local cexec binary.
+/// Find the local cexec binary for deployment to a remote Linux host.
+///
+/// On Windows, searches for the Linux cross-compiled binary (without .exe).
+/// On Unix, searches with the normal platform extension.
 fn find_local_binary() -> Result<String, String> {
-    platform::find_binary("cexec")
+    platform::find_remote_binary("cexec")
         .map(|p| p.to_string_lossy().to_string())
         .map_err(|e| format!("{}", e))
 }
