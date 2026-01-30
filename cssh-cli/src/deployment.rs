@@ -1,13 +1,16 @@
 use std::process::Command;
 
 use crate::args::CsshArgs;
+use crate::remote_setup;
+use cssh_common::platform;
 
 /// Deploy the cssh-remote binary to the remote host.
 ///
 /// 1. Check if the binary already exists at ~/.cssh/ on the remote
 /// 2. Deploy via SCP only if it does not exist
 pub fn deploy_remote_binary(args: &CsshArgs) -> Result<(), String> {
-    let remote_bin_path = format!(".cssh/{}", args.remote_name);
+    let install_dir = remote_setup::remote_install_dir();
+    let remote_bin_path = format!("{}/{}", install_dir, args.remote_name);
 
     // Check if the binary exists on the remote
     if check_remote_binary_exists(args, &remote_bin_path)? {
@@ -51,19 +54,9 @@ fn check_remote_binary_exists(args: &CsshArgs, remote_path: &str) -> Result<bool
 
 /// Find the local cexec binary.
 fn find_local_binary() -> Result<String, String> {
-    // Look for cexec in the same directory as the running binary
-    let current_exe = std::env::current_exe()
-        .map_err(|e| format!("failed to get current exe path: {}", e))?;
-    let dir = current_exe
-        .parent()
-        .ok_or("failed to get parent directory")?;
-    let remote_bin = dir.join("cexec");
-
-    if remote_bin.exists() {
-        return Ok(remote_bin.to_string_lossy().to_string());
-    }
-
-    Err("cexec binary not found".to_string())
+    platform::find_binary("cexec")
+        .map(|p| p.to_string_lossy().to_string())
+        .map_err(|e| format!("{}", e))
 }
 
 /// Create the ~/.cssh/ directory on the remote.
@@ -133,13 +126,13 @@ fn set_remote_executable(args: &CsshArgs, remote_path: &str) -> Result<(), Strin
 
 /// Add ~/.cssh/ to PATH in the remote ~/.bashrc.
 fn setup_remote_path(args: &CsshArgs) -> Result<(), String> {
+    let script = remote_setup::generate_setup_script();
+
     let mut cmd = Command::new("ssh");
     for opt in &args.ssh_options {
         cmd.arg(opt);
     }
-    cmd.arg(&args.destination).arg(
-        r#"grep -q 'export PATH="$HOME/.cssh:$PATH"' ~/.bashrc 2>/dev/null || echo 'export PATH="$HOME/.cssh:$PATH"' >> ~/.bashrc"#,
-    );
+    cmd.arg(&args.destination).arg(&script);
 
     let status = cmd
         .status()

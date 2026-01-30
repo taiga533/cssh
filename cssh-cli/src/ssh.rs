@@ -3,6 +3,7 @@ use std::process::{Child, Command, Stdio};
 
 use crate::args::CsshArgs;
 use crate::deployment;
+use cssh_common::platform;
 
 /// Run the main cssh workflow.
 ///
@@ -63,18 +64,9 @@ fn start_agent(args: &CsshArgs) -> Result<(AgentGuard, u16), String> {
 
 /// Find the agent binary.
 fn find_agent_binary() -> Result<String, String> {
-    let current_exe =
-        std::env::current_exe().map_err(|e| format!("failed to get current exe path: {}", e))?;
-    let dir = current_exe
-        .parent()
-        .ok_or("failed to get parent directory")?;
-    let agent_bin = dir.join("cssh-agent");
-
-    if agent_bin.exists() {
-        return Ok(agent_bin.to_string_lossy().to_string());
-    }
-
-    Err("cssh-agent binary not found".to_string())
+    platform::find_binary("cssh-agent")
+        .map(|p| p.to_string_lossy().to_string())
+        .map_err(|e| format!("{}", e))
 }
 
 /// Run SSH connection and return the exit code.

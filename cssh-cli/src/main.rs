@@ -1,5 +1,6 @@
 mod args;
 mod deployment;
+mod remote_setup;
 mod ssh;
 
 use tracing_subscriber::EnvFilter;

@@ -31,8 +31,14 @@ mod tests {
     #[test]
     fn echo_command_executes_correctly() {
         // Arrange
+        #[cfg(target_family = "unix")]
         let request = ExecuteRequest {
             args: vec!["echo".to_string(), "hello".to_string()],
+        };
+
+        #[cfg(target_family = "windows")]
+        let request = ExecuteRequest {
+            args: vec!["cmd".to_string(), "/C".to_string(), "echo".to_string(), "hello".to_string()],
         };
 
         // Act
@@ -72,8 +78,14 @@ mod tests {
     #[test]
     fn nonzero_exit_code_is_handled_correctly() {
         // Arrange
+        #[cfg(target_family = "unix")]
         let request = ExecuteRequest {
             args: vec!["false".to_string()],
+        };
+
+        #[cfg(target_family = "windows")]
+        let request = ExecuteRequest {
+            args: vec!["cmd".to_string(), "/C".to_string(), "exit".to_string(), "1".to_string()],
         };
 
         // Act
