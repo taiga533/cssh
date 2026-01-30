@@ -1,0 +1,12 @@
+services:
+  sshd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "2222:22"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo | ssh-keyscan -p 22 localhost > /dev/null 2>&1"]
+      interval: 2s
+      timeout: 5s
+      retries: 10

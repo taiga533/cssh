@@ -1,0 +1,13 @@
+[package]
+name = "cssh-remote"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "cexec"
+path = "src/main.rs"
+
+[dependencies]
+cssh-common = { path = "../cssh-common" }
+tokio = { workspace = true }
+thiserror = { workspace = true }

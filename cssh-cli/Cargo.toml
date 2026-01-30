@@ -1,0 +1,16 @@
+[package]
+name = "cssh-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "cssh"
+path = "src/main.rs"
+
+[dependencies]
+cssh-common = { path = "../cssh-common" }
+tokio = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
