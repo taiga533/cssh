@@ -21,6 +21,29 @@ pub fn parse() -> Result<CsshArgs, String> {
     parse_from(&args)
 }
 
+/// Validate remote name to prevent command injection and path traversal attacks.
+fn validate_remote_name(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("remote name cannot be empty".to_string());
+    }
+    if name.len() > 255 {
+        return Err("remote name must not exceed 255 characters".to_string());
+    }
+    if name.contains('\0') {
+        return Err("remote name contains null byte".to_string());
+    }
+    if name.contains('/') || name.contains("..") {
+        return Err("remote name must not contain '/' or '..'".to_string());
+    }
+    if name.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("remote name contains whitespace or control characters".to_string());
+    }
+    if name.chars().any(|c| ";&|`$<>".contains(c)) {
+        return Err("remote name contains invalid shell metacharacters".to_string());
+    }
+    Ok(())
+}
+
 /// Parse from a given argument list (for testing).
 pub fn parse_from(args: &[String]) -> Result<CsshArgs, String> {
     let mut remote_name = "cexec".to_string();
@@ -47,6 +70,7 @@ pub fn parse_from(args: &[String]) -> Result<CsshArgs, String> {
                 .get(i)
                 .ok_or("--remote-name requires a value")?
                 .clone();
+            validate_remote_name(&remote_name)?;
         } else if arg == "--listen-port" {
             i += 1;
             listen_port = args
@@ -161,5 +185,82 @@ mod tests {
 
         // Assert
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_remote_name_with_path_traversal() {
+        // Arrange
+        let args = s(&["--remote-name", "../../../tmp/evil", "user@host"]);
+
+        // Act
+        let result = parse_from(&args);
+
+        // Assert
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("or '..'"));
+    }
+
+    #[test]
+    fn rejects_remote_name_with_slash() {
+        // Arrange
+        let args = s(&["--remote-name", "dir/evil", "user@host"]);
+
+        // Act
+        let result = parse_from(&args);
+
+        // Assert
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_remote_name_with_shell_metacharacters() {
+        // Arrange
+        let args = s(&["--remote-name", "cexec;rm", "user@host"]);
+
+        // Act
+        let result = parse_from(&args);
+
+        // Assert
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("shell metacharacters"));
+    }
+
+    #[test]
+    fn rejects_remote_name_with_whitespace() {
+        // Arrange
+        let args = s(&["--remote-name", "cexec test", "user@host"]);
+
+        // Act
+        let result = parse_from(&args);
+
+        // Assert
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("whitespace"));
+    }
+
+    #[test]
+    fn accepts_valid_remote_name() {
+        // Arrange
+        let args = s(&["--remote-name", "myexec", "user@host"]);
+
+        // Act
+        let result = parse_from(&args);
+
+        // Assert
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().remote_name, "myexec");
+    }
+
+    #[test]
+    fn accepts_remote_name_with_hyphens_and_underscores() {
+        // Arrange
+        let args = s(&["--remote-name", "my-exec_v2", "user@host"]);
+
+        // Act
+        let result = parse_from(&args);
+
+        // Assert
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().remote_name, "my-exec_v2");
     }
 }
