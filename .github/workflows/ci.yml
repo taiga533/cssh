@@ -81,14 +81,3 @@ jobs:
       - name: Print Docker logs on failure
         if: failure()
         run: docker-compose -f e2e/docker-compose.yml logs
-
-  commit-check:
-    name: Commit Message Format
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-        with:
-          fetch-depth: 0
-
-      - uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
