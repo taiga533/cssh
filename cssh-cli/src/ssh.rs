@@ -195,9 +195,18 @@ mod tests {
         let cmd = build_port_file_command(connection_info);
 
         // Assert
-        assert!(cmd.contains("umask 077"), "command should use umask 077 subshell");
-        assert!(!cmd.contains("chmod"), "command should not use chmod (TOCTOU risk)");
-        assert!(cmd.contains(connection_info), "command should contain connection info");
+        assert!(
+            cmd.contains("umask 077"),
+            "command should use umask 077 subshell"
+        );
+        assert!(
+            !cmd.contains("chmod"),
+            "command should not use chmod (TOCTOU risk)"
+        );
+        assert!(
+            cmd.contains(connection_info),
+            "command should contain connection info"
+        );
     }
 
     #[test]

@@ -40,7 +40,10 @@ fn is_cmd_or_bat(program: &str) -> bool {
 fn escape_cmd_arg(arg: &str) -> String {
     let mut escaped = String::with_capacity(arg.len());
     for ch in arg.chars() {
-        if matches!(ch, '&' | '|' | '(' | ')' | '<' | '>' | '^' | '"' | '%' | '!') {
+        if matches!(
+            ch,
+            '&' | '|' | '(' | ')' | '<' | '>' | '^' | '"' | '%' | '!'
+        ) {
             escaped.push('^');
         }
         escaped.push(ch);

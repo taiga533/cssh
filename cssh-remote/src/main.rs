@@ -16,7 +16,9 @@ pub(crate) enum ConnectionInfo {
 /// - `tcp|<port>|<token>` (TCP)
 fn resolve_connection_info() -> Result<ConnectionInfo, String> {
     let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
-    let port_file = std::path::PathBuf::from(home).join(".cssh").join("agent_port");
+    let port_file = std::path::PathBuf::from(home)
+        .join(".cssh")
+        .join("agent_port");
     let content = std::fs::read_to_string(&port_file)
         .map_err(|e| format!("failed to read {}: {}", port_file.display(), e))?;
     parse_connection_info(&content, &port_file.to_string_lossy())
@@ -36,7 +38,10 @@ fn parse_connection_info(content: &str, path: &str) -> Result<ConnectionInfo, St
 
     let parts: Vec<&str> = first_line.splitn(3, '|').collect();
     if parts.len() < 3 {
-        return Err(format!("invalid connection info in {}: '{}'", path, first_line));
+        return Err(format!(
+            "invalid connection info in {}: '{}'",
+            path, first_line
+        ));
     }
     let kind = parts[0];
     let value = parts[1];

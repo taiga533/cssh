@@ -162,5 +162,4 @@ mod tests {
             assert!(!supports_unix_socket_forwarding());
         }
     }
-
 }

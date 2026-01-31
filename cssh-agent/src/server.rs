@@ -372,7 +372,10 @@ mod tests {
         // Assert
         let stderr = String::from_utf8_lossy(&response.stderr);
         assert_eq!(stderr, "command execution failed");
-        assert!(!stderr.contains("/nonexistent"), "error should not leak system paths");
+        assert!(
+            !stderr.contains("/nonexistent"),
+            "error should not leak system paths"
+        );
         assert_eq!(response.exit_code, 1);
     }
 
