@@ -1,39 +1,60 @@
 mod client;
 
-/// Agent connection info (port and authentication token).
-#[derive(Debug)]
-struct AgentInfo {
-    port: u16,
-    token: String,
+/// Connection info for reaching the agent.
+#[derive(Debug, PartialEq)]
+pub(crate) enum ConnectionInfo {
+    /// Connect via Unix domain socket (used when host is Unix).
+    UnixSocket { path: String, token: String },
+    /// Connect via TCP (used when host is Windows).
+    Tcp { port: u16, token: String },
 }
 
-/// Resolve the agent port and token by reading the port file.
+/// Resolve agent connection info by reading the port file.
 ///
-/// Reads `~/.cssh/agent_port` which contains the port on the first line
-/// and the authentication token on the second line.
-fn resolve_agent_info() -> Result<AgentInfo, String> {
+/// Reads `~/.cssh/agent_port` which contains connection info in one of:
+/// - `socket|<path>|<token>` (Unix socket)
+/// - `tcp|<port>|<token>` (TCP)
+fn resolve_connection_info() -> Result<ConnectionInfo, String> {
     let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
     let port_file = std::path::PathBuf::from(home).join(".cssh").join("agent_port");
     let content = std::fs::read_to_string(&port_file)
         .map_err(|e| format!("failed to read {}: {}", port_file.display(), e))?;
-    parse_agent_info(&content, &port_file.to_string_lossy())
+    parse_connection_info(&content, &port_file.to_string_lossy())
 }
 
-/// Parse agent info from the content of the port file.
+/// Parse connection info from the content of the port file.
 ///
-/// The first line contains the port number, and the optional second line
-/// contains the authentication token.
-fn parse_agent_info(content: &str, path: &str) -> Result<AgentInfo, String> {
-    let mut lines = content.lines();
-    let port_str = lines
+/// Supports two formats:
+/// - `socket|<path>|<token>` → UnixSocket
+/// - `tcp|<port>|<token>` → Tcp
+fn parse_connection_info(content: &str, path: &str) -> Result<ConnectionInfo, String> {
+    let first_line = content
+        .lines()
         .next()
-        .ok_or_else(|| format!("empty port file: {}", path))?;
-    let port = port_str
-        .trim()
-        .parse::<u16>()
-        .map_err(|_| format!("invalid port in {}: '{}'", path, port_str.trim()))?;
-    let token = lines.next().unwrap_or("").trim().to_string();
-    Ok(AgentInfo { port, token })
+        .ok_or_else(|| format!("empty port file: {}", path))?
+        .trim();
+
+    let parts: Vec<&str> = first_line.splitn(3, '|').collect();
+    if parts.len() < 3 {
+        return Err(format!("invalid connection info in {}: '{}'", path, first_line));
+    }
+    let kind = parts[0];
+    let value = parts[1];
+    let token = parts[2].to_string();
+
+    match kind {
+        "socket" => Ok(ConnectionInfo::UnixSocket {
+            path: value.to_string(),
+            token,
+        }),
+        "tcp" => {
+            let port = value
+                .parse::<u16>()
+                .map_err(|_| format!("invalid port in {}: '{}'", path, value))?;
+            Ok(ConnectionInfo::Tcp { port, token })
+        }
+        _ => Err(format!("unknown connection type in {}: '{}'", path, kind)),
+    }
 }
 
 #[tokio::main]
@@ -44,7 +65,7 @@ async fn main() {
         std::process::exit(1);
     }
 
-    let agent_info = match resolve_agent_info() {
+    let conn_info = match resolve_connection_info() {
         Ok(info) => info,
         Err(e) => {
             eprintln!("cssh-remote error: {}", e);
@@ -52,7 +73,7 @@ async fn main() {
         }
     };
 
-    match client::execute(agent_info.port, agent_info.token, args).await {
+    match client::execute(conn_info, args).await {
         Ok(response) => {
             use std::io::Write;
             std::io::stdout().write_all(&response.stdout).ok();
@@ -71,38 +92,48 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_agent_info_reads_port_and_token() {
+    fn parse_connection_info_parses_socket_format() {
         // Arrange
-        let content = "54321\nabc123token\n";
+        let content = "socket|/tmp/cssh-agent-12345.sock|abctoken\n";
 
         // Act
-        let info = parse_agent_info(content, "test").unwrap();
+        let info = parse_connection_info(content, "test").unwrap();
 
         // Assert
-        assert_eq!(info.port, 54321);
-        assert_eq!(info.token, "abc123token");
+        assert_eq!(
+            info,
+            ConnectionInfo::UnixSocket {
+                path: "/tmp/cssh-agent-12345.sock".to_string(),
+                token: "abctoken".to_string(),
+            }
+        );
     }
 
     #[test]
-    fn parse_agent_info_handles_port_only_for_backwards_compatibility() {
+    fn parse_connection_info_parses_tcp_format() {
         // Arrange
-        let content = "54321\n";
+        let content = "tcp|54321|mytoken\n";
 
         // Act
-        let info = parse_agent_info(content, "test").unwrap();
+        let info = parse_connection_info(content, "test").unwrap();
 
         // Assert
-        assert_eq!(info.port, 54321);
-        assert_eq!(info.token, "");
+        assert_eq!(
+            info,
+            ConnectionInfo::Tcp {
+                port: 54321,
+                token: "mytoken".to_string(),
+            }
+        );
     }
 
     #[test]
-    fn parse_agent_info_returns_error_for_empty_content() {
+    fn parse_connection_info_returns_error_for_empty_content() {
         // Arrange
         let content = "";
 
         // Act
-        let result = parse_agent_info(content, "test");
+        let result = parse_connection_info(content, "test");
 
         // Assert
         assert!(result.is_err());
@@ -110,12 +141,12 @@ mod tests {
     }
 
     #[test]
-    fn parse_agent_info_returns_error_for_invalid_port() {
+    fn parse_connection_info_returns_error_for_invalid_port_in_tcp_format() {
         // Arrange
-        let content = "not_a_number\n";
+        let content = "tcp|bad|token\n";
 
         // Act
-        let result = parse_agent_info(content, "test");
+        let result = parse_connection_info(content, "test");
 
         // Assert
         assert!(result.is_err());
@@ -123,15 +154,28 @@ mod tests {
     }
 
     #[test]
-    fn parse_agent_info_trims_whitespace() {
+    fn parse_connection_info_returns_error_for_unknown_type() {
         // Arrange
-        let content = "  12345  \n  mytoken  \n";
+        let content = "unknown|value|token\n";
 
         // Act
-        let info = parse_agent_info(content, "test").unwrap();
+        let result = parse_connection_info(content, "test");
 
         // Assert
-        assert_eq!(info.port, 12345);
-        assert_eq!(info.token, "mytoken");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown connection type"));
+    }
+
+    #[test]
+    fn parse_connection_info_returns_error_for_legacy_format() {
+        // Arrange
+        let content = "54321\nabc123token\n";
+
+        // Act
+        let result = parse_connection_info(content, "test");
+
+        // Assert
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid connection info"));
     }
 }

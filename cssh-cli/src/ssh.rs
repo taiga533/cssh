@@ -89,9 +89,18 @@ fn find_agent_binary() -> Result<String, String> {
 fn run_ssh(args: &CsshArgs, agent_port: u16) -> Result<i32, String> {
     let mut cmd = Command::new("ssh");
 
-    // Reverse port forwarding: connect the remote port to the local agent port
-    cmd.arg("-R")
-        .arg(format!("{}:127.0.0.1:{}", agent_port, agent_port));
+    // Reverse port forwarding: connect the remote port to the local agent port.
+    // On Unix hosts, use Unix domain socket forwarding (streamlocal).
+    // On Windows hosts, fall back to TCP port forwarding.
+    let forward_arg = if platform::supports_unix_socket_forwarding() {
+        format!(
+            "/tmp/cssh-agent-{}.sock:127.0.0.1:{}",
+            agent_port, agent_port
+        )
+    } else {
+        format!("{}:127.0.0.1:{}", agent_port, agent_port)
+    };
+    cmd.arg("-R").arg(&forward_arg);
 
     // User-specified SSH options
     for opt in &args.ssh_options {
@@ -124,9 +133,17 @@ fn write_remote_port_file(args: &CsshArgs, port: u16, token: &str) -> Result<(),
     for opt in &args.ssh_options {
         cmd.arg(opt);
     }
+    // Write connection info in the new format:
+    //   Unix host:    socket|/tmp/cssh-agent-{port}.sock|{token}
+    //   Windows host: tcp|{port}|{token}
+    let connection_info = if platform::supports_unix_socket_forwarding() {
+        format!("socket|/tmp/cssh-agent-{}.sock|{}", port, token)
+    } else {
+        format!("tcp|{}|{}", port, token)
+    };
     cmd.arg(&args.destination).arg(format!(
-        "mkdir -p ~/.cssh && printf '%s\\n%s\\n' '{}' '{}' > ~/.cssh/agent_port && chmod 600 ~/.cssh/agent_port",
-        port, token
+        "mkdir -p ~/.cssh && printf '%s\\n' '{}' > ~/.cssh/agent_port && chmod 600 ~/.cssh/agent_port",
+        connection_info
     ));
     let status = cmd
         .status()
