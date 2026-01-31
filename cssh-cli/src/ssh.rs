@@ -117,6 +117,17 @@ fn run_ssh(args: &CsshArgs, agent_port: u16) -> Result<i32, String> {
     Ok(status.code().unwrap_or(1))
 }
 
+/// Build the shell command that creates the agent port file with restricted permissions.
+///
+/// Uses `umask 077` in a subshell so the file is created with mode 600 from the start,
+/// avoiding a TOCTOU race between file creation and chmod.
+fn build_port_file_command(connection_info: &str) -> String {
+    format!(
+        "mkdir -p ~/.cssh && (umask 077 && printf '%s\\n' '{}' > ~/.cssh/agent_port)",
+        connection_info
+    )
+}
+
 /// Write the agent port number and token to a file on the remote host.
 ///
 /// Creates `~/.cssh/agent_port` containing the port and token (one per line)
@@ -134,10 +145,8 @@ fn write_remote_port_file(args: &CsshArgs, port: u16, token: &str) -> Result<(),
     } else {
         format!("tcp|{}|{}", port, token)
     };
-    cmd.arg(&args.destination).arg(format!(
-        "mkdir -p ~/.cssh && printf '%s\\n' '{}' > ~/.cssh/agent_port && chmod 600 ~/.cssh/agent_port",
-        connection_info
-    ));
+    cmd.arg(&args.destination)
+        .arg(build_port_file_command(&connection_info));
     let status = cmd
         .status()
         .map_err(|e| format!("failed to write port file: {}", e))?;
@@ -175,6 +184,20 @@ mod tests {
         // Assert
         assert_eq!(token.len(), 64);
         assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn port_file_command_uses_umask_instead_of_chmod() {
+        // Arrange
+        let connection_info = "socket|/tmp/cssh-agent-12345.sock|abcdef";
+
+        // Act
+        let cmd = build_port_file_command(connection_info);
+
+        // Assert
+        assert!(cmd.contains("umask 077"), "command should use umask 077 subshell");
+        assert!(!cmd.contains("chmod"), "command should not use chmod (TOCTOU risk)");
+        assert!(cmd.contains(connection_info), "command should contain connection info");
     }
 
     #[test]

@@ -131,10 +131,13 @@ async fn handle_connection(
         }
 
         info!("executing command: {:?}", request.args);
-        let response = executor::execute(&request).unwrap_or_else(|e| ExecuteResponse {
-            exit_code: 1,
-            stdout: Vec::new(),
-            stderr: format!("execution error: {}", e).into_bytes(),
+        let response = executor::execute(&request).unwrap_or_else(|e| {
+            error!("command execution failed: {}", e);
+            ExecuteResponse {
+                exit_code: 1,
+                stdout: Vec::new(),
+                stderr: b"command execution failed".to_vec(),
+            }
         });
 
         write_message(&mut writer, &response).await?;
@@ -339,6 +342,38 @@ mod tests {
             DELAY_SECONDS,
             elapsed
         );
+    }
+
+    #[tokio::test]
+    async fn execution_error_does_not_leak_details_to_remote() {
+        // Arrange
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let guard = Arc::new(Mutex::new(BruteForceGuard::new()));
+
+        let g = guard.clone();
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            handle_connection(stream, None, &g).await.unwrap();
+        });
+
+        let stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        let (mut reader, mut writer) = stream.into_split();
+
+        let request = ExecuteRequest {
+            args: vec!["/nonexistent/binary/xyz".to_string()],
+            token: String::new(),
+        };
+
+        // Act
+        client_write(&mut writer, &request).await.unwrap();
+        let response: ExecuteResponse = read_message(&mut reader).await.unwrap();
+
+        // Assert
+        let stderr = String::from_utf8_lossy(&response.stderr);
+        assert_eq!(stderr, "command execution failed");
+        assert!(!stderr.contains("/nonexistent"), "error should not leak system paths");
+        assert_eq!(response.exit_code, 1);
     }
 
     #[test]
