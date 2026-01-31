@@ -16,74 +16,38 @@ A CLI tool that wraps SSH and automatically starts a host-side agent on connecti
 `cssh` automatically performs the following:
 
 1. Starts `cssh-agent` in the background on the host
-2. Deploys the `cexec` binary to `~/.cssh/` on the remote (first time only)
-3. Opens an SSH connection with `-R` reverse port forwarding
-4. Running `cexec <command>` on the remote executes that command on the host
+2. Opens an SSH connection with `-R` reverse port forwarding
+3. Running `cexec <command>` on the remote executes that command on the host
 
 ## Installation
 
-### Linux / macOS
+### Host side (where you run `cssh`)
+
+Install `cssh` and `cssh-agent`:
 
 ```bash
-cargo build --release
+cargo install --git https://github.com/taiga533/cssh cssh-cli cssh-agent
 ```
 
-### Windows
+`cssh-agent` must be in your PATH so that `cssh` can start it automatically.
 
-Windows 10/11 is supported. The remote host must be Linux/Unix.
+**Windows notes:**
 
-**Prerequisites:**
+- Windows 10/11 is supported as the host.
+- OpenSSH Client is required (included by default in Windows 10 1809+). Verify with `ssh -V`.
+- One of the following C toolchains is required:
+  - **Visual Studio Build Tools (MSVC)** — Download [Build Tools for Visual Studio](https://visualstudio.microsoft.com/downloads/) and select "Desktop development with C++" during installation.
+  - **MinGW (GNU)** — Install via [Scoop](https://scoop.sh/) (`scoop install mingw`) or [Chocolatey](https://chocolatey.org/) (`choco install mingw`), then run `rustup default stable-gnu`.
 
-One of the following C toolchains is required:
+### Remote side (where you run `cexec`)
 
-- **Visual Studio Build Tools (MSVC)** — Download [Build Tools for Visual Studio](https://visualstudio.microsoft.com/downloads/) and select "Desktop development with C++" during installation.
-- **MinGW (GNU)** — Install via [Scoop](https://scoop.sh/) or [Chocolatey](https://chocolatey.org/):
-
-  ```powershell
-  # Scoop
-  scoop install mingw
-
-  # Chocolatey
-  choco install mingw
-  ```
-
-  Then switch Rust to the GNU toolchain:
-
-  ```powershell
-  rustup default stable-gnu
-  ```
-
-OpenSSH Client is also required (included by default in Windows 10 1809+). Verify with:
-
-```powershell
-ssh -V
-```
-
-Build:
-
-```powershell
-cargo build --release
-```
-
-Build artifacts are generated in `target/release/`:
-
-| Binary | Description |
-|---|---|
-| `cssh` (`cssh.exe` on Windows) | CLI entry point |
-| `cssh-agent` (`cssh-agent.exe` on Windows) | Host-side agent |
-| `cexec` (`cexec.exe` on Windows) | Remote executable |
-
-Place all three binaries in the same directory and add it to your PATH.
+Install `cexec` on each remote host:
 
 ```bash
-# Linux / macOS
-export PATH="$(pwd)/target/release:$PATH"
+cargo install --git https://github.com/taiga533/cssh cssh-remote
 ```
 
-```powershell
-# Windows (PowerShell)
-$env:PATH = "$(Get-Location)\target\release;$env:PATH"
-```
+`cexec` must be in your PATH on the remote host.
 
 ## Usage
 
@@ -123,11 +87,10 @@ cexec pwd
 
 | Option | Description | Default |
 |---|---|---|
-| `--remote-name <NAME>` | Remote executable name | `cexec` |
 | `--listen-port <PORT>` | Agent port | Auto-assigned |
 
 ```bash
-cssh --remote-name myexec --listen-port 8080 user@example.com
+cssh --listen-port 8080 user@example.com
 ```
 
 ## SSH Server Configuration

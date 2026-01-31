@@ -2,16 +2,14 @@ use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 
 use crate::args::CsshArgs;
-use crate::deployment;
 use cssh_common::platform;
 
 /// Run the main cssh workflow.
 ///
 /// 1. Generate authentication token
 /// 2. Start the agent in the background
-/// 3. Deploy cssh-remote to the remote host
-/// 4. Write agent port and token to a file on the remote host
-/// 5. Open SSH connection with reverse port forwarding
+/// 3. Write agent port and token to a file on the remote host
+/// 4. Open SSH connection with reverse port forwarding
 pub async fn run(args: CsshArgs) -> Result<(), String> {
     // Generate authentication token
     let token = generate_token();
@@ -19,11 +17,6 @@ pub async fn run(args: CsshArgs) -> Result<(), String> {
     // Start the agent
     let (agent_process, agent_port) = start_agent(&args, &token)?;
     tracing::info!("agent started: port {}", agent_port);
-
-    // Deploy remote binary
-    if let Err(e) = deployment::deploy_remote_binary(&args) {
-        tracing::warn!("remote binary deployment skipped: {}", e);
-    }
 
     // Write agent port and token to file on remote
     write_remote_port_file(&args, agent_port, &token)?;
