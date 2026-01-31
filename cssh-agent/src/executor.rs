@@ -133,7 +133,12 @@ mod tests {
 
         #[cfg(target_family = "windows")]
         let request = ExecuteRequest {
-            args: vec!["exit".to_string(), "1".to_string()],
+            args: vec![
+                "cmd".to_string(),
+                "/c".to_string(),
+                "exit".to_string(),
+                "1".to_string(),
+            ],
             token: String::new(),
         };
 
