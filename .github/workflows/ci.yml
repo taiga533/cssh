@@ -3,8 +3,20 @@ name: CI
 on:
   push:
     branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "e2e/**"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "e2e/**"
+      - ".github/workflows/ci.yml"
 
 jobs:
   format-check:
@@ -79,11 +91,17 @@ jobs:
         shell: bash
         run: docker compose --version
 
-      - name: Run E2E tests
+      - name: Run E2E tests (Ubuntu / UDS)
+        if: runner.os == 'Linux'
         shell: bash
         run: bash e2e/run_e2e.sh
+
+      - name: Run E2E tests (Windows / TCP)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: bash e2e/run_e2e_windows.sh
 
       - name: Print Docker logs on failure
         if: failure()
         shell: bash
-        run: docker compose -f e2e/docker compose.yml logs
+        run: docker compose -f e2e/compose.yml logs
