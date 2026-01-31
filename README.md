@@ -16,29 +16,38 @@ A CLI tool that wraps SSH and automatically starts a host-side agent on connecti
 `cssh` automatically performs the following:
 
 1. Starts `cssh-agent` in the background on the host
-2. Deploys the `cexec` binary to `~/.cssh/` on the remote (first time only)
-3. Opens an SSH connection with `-R` reverse port forwarding
-4. Running `cexec <command>` on the remote executes that command on the host
+2. Opens an SSH connection with `-R` reverse port forwarding
+3. Running `cexec <command>` on the remote executes that command on the host
 
 ## Installation
 
-```bash
-cargo build --release
-```
+### Host side (where you run `cssh`)
 
-Build artifacts are generated in `target/release/`:
-
-| Binary | Description |
-|---|---|
-| `cssh` | CLI entry point |
-| `cssh-agent` | Host-side agent |
-| `cexec` | Remote executable |
-
-Place all three binaries in the same directory and add it to your PATH.
+Install `cssh` and `cssh-agent`:
 
 ```bash
-export PATH="$(pwd)/target/release:$PATH"
+cargo install --git https://github.com/taiga533/cssh cssh-cli cssh-agent
 ```
+
+`cssh-agent` must be in your PATH so that `cssh` can start it automatically.
+
+**Windows notes:**
+
+- Windows 10/11 is supported as the host.
+- OpenSSH Client is required (included by default in Windows 10 1809+). Verify with `ssh -V`.
+- One of the following C toolchains is required:
+  - **Visual Studio Build Tools (MSVC)** — Download [Build Tools for Visual Studio](https://visualstudio.microsoft.com/downloads/) and select "Desktop development with C++" during installation.
+  - **MinGW (GNU)** — Install via [Scoop](https://scoop.sh/) (`scoop install mingw`) or [Chocolatey](https://chocolatey.org/) (`choco install mingw`), then run `rustup default stable-gnu`.
+
+### Remote side (where you run `cexec`)
+
+Install `cexec` on each remote host:
+
+```bash
+cargo install --git https://github.com/taiga533/cssh cssh-remote
+```
+
+`cexec` must be in your PATH on the remote host.
 
 ## Usage
 
@@ -78,11 +87,10 @@ cexec pwd
 
 | Option | Description | Default |
 |---|---|---|
-| `--remote-name <NAME>` | Remote executable name | `cexec` |
 | `--listen-port <PORT>` | Agent port | Auto-assigned |
 
 ```bash
-cssh --remote-name myexec --listen-port 8080 user@example.com
+cssh --listen-port 8080 user@example.com
 ```
 
 ## SSH Server Configuration

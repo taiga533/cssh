@@ -15,7 +15,9 @@ async fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
 
-    if let Err(e) = server::run(port).await {
+    let token: Option<String> = std::env::args().nth(2);
+
+    if let Err(e) = server::run(port, token).await {
         eprintln!("agent error: {}", e);
         std::process::exit(1);
     }

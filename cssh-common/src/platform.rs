@@ -22,7 +22,6 @@ pub fn executable_extension() -> &'static str {
 /// On Windows, automatically appends the ".exe" extension.
 /// On Unix, searches for the exact name.
 pub fn find_binary(binary_name: &str) -> Result<PathBuf> {
-    // First, check if the binary exists in the current directory
     let exe_ext = executable_extension();
     let binary_with_ext = format!("{}{}", binary_name, exe_ext);
 
@@ -78,6 +77,14 @@ pub fn is_executable(path: &std::path::Path) -> bool {
             false
         }
     }
+}
+
+/// Check if the current platform supports Unix domain socket forwarding via SSH.
+///
+/// Returns true on Unix-family platforms (Linux, macOS), false on Windows
+/// where Win32-OpenSSH does not support streamlocal forwarding.
+pub fn supports_unix_socket_forwarding() -> bool {
+    cfg!(target_family = "unix")
 }
 
 /// Make a file executable.
@@ -142,5 +149,17 @@ mod tests {
     fn make_executable_does_not_panic() {
         let path = std::path::Path::new("/tmp/nonexistent_file");
         let _ = make_executable(path);
+    }
+
+    #[test]
+    fn supports_unix_socket_forwarding_returns_correct_value() {
+        #[cfg(target_family = "unix")]
+        {
+            assert!(supports_unix_socket_forwarding());
+        }
+        #[cfg(target_family = "windows")]
+        {
+            assert!(!supports_unix_socket_forwarding());
+        }
     }
 }

@@ -43,6 +43,7 @@ mod unix_tests {
         // Act
         let request = ExecuteRequest {
             args: vec!["echo".to_string(), "integration test".to_string()],
+            token: String::new(),
         };
         write_message(&mut writer, &request).await.unwrap();
         let response: ExecuteResponse = read_message(&mut reader).await.unwrap();
@@ -72,6 +73,7 @@ mod unix_tests {
         // Act & Assert - first
         let req1 = ExecuteRequest {
             args: vec!["echo".to_string(), "first".to_string()],
+            token: String::new(),
         };
         write_message(&mut writer, &req1).await.unwrap();
         let resp1: ExecuteResponse = read_message(&mut reader).await.unwrap();
@@ -80,6 +82,7 @@ mod unix_tests {
         // Act & Assert - second
         let req2 = ExecuteRequest {
             args: vec!["echo".to_string(), "second".to_string()],
+            token: String::new(),
         };
         write_message(&mut writer, &req2).await.unwrap();
         let resp2: ExecuteResponse = read_message(&mut reader).await.unwrap();
@@ -107,17 +110,23 @@ mod windows_tests {
 
         // Act
         let request = ExecuteRequest {
-            args: vec!["cmd".to_string(), "/C".to_string(), "echo".to_string(), "integration test".to_string()],
+            args: vec![
+                "cmd".to_string(),
+                "/C".to_string(),
+                "echo".to_string(),
+                "integration test".to_string(),
+            ],
+            token: String::new(),
         };
         write_message(&mut writer, &request).await.unwrap();
         let response: ExecuteResponse = read_message(&mut reader).await.unwrap();
 
         // Assert
         assert_eq!(response.exit_code, 0);
-        assert_eq!(
-            String::from_utf8_lossy(&response.stdout).trim(),
-            "integration test"
-        );
+        let stdout = String::from_utf8_lossy(&response.stdout).trim().to_string();
+        // Windows cmd.exe wraps multi-word echo arguments in double quotes
+        let stdout = stdout.trim_matches('"');
+        assert_eq!(stdout, "integration test");
     }
 
     #[tokio::test]
@@ -136,7 +145,13 @@ mod windows_tests {
 
         // Act & Assert - first
         let req1 = ExecuteRequest {
-            args: vec!["cmd".to_string(), "/C".to_string(), "echo".to_string(), "first".to_string()],
+            args: vec![
+                "cmd".to_string(),
+                "/C".to_string(),
+                "echo".to_string(),
+                "first".to_string(),
+            ],
+            token: String::new(),
         };
         write_message(&mut writer, &req1).await.unwrap();
         let resp1: ExecuteResponse = read_message(&mut reader).await.unwrap();
@@ -144,7 +159,13 @@ mod windows_tests {
 
         // Act & Assert - second
         let req2 = ExecuteRequest {
-            args: vec!["cmd".to_string(), "/C".to_string(), "echo".to_string(), "second".to_string()],
+            args: vec![
+                "cmd".to_string(),
+                "/C".to_string(),
+                "echo".to_string(),
+                "second".to_string(),
+            ],
+            token: String::new(),
         };
         write_message(&mut writer, &req2).await.unwrap();
         let resp2: ExecuteResponse = read_message(&mut reader).await.unwrap();

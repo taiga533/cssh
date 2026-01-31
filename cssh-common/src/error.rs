@@ -15,6 +15,9 @@ pub enum CsshError {
 
     #[error("Command execution error: {0}")]
     Execution(String),
+
+    #[error("Authentication failed")]
+    AuthenticationFailed,
 }
 
 pub type Result<T> = std::result::Result<T, CsshError>;

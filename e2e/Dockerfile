@@ -7,7 +7,6 @@ RUN apt-get update && apt-get install -y \
 # SSHサーバー設定
 RUN mkdir /var/run/sshd
 RUN echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
-RUN echo 'AcceptEnv CSSH_PORT' >> /etc/ssh/sshd_config
 RUN echo 'GatewayPorts no' >> /etc/ssh/sshd_config
 
 # テスト用ユーザー作成

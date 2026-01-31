@@ -1,8 +1,6 @@
 /// Parsed cssh CLI arguments.
 #[derive(Debug, Clone)]
 pub struct CsshArgs {
-    /// Remote executable name.
-    pub remote_name: String,
     /// Agent listen port (0 = auto).
     pub listen_port: u16,
     /// SSH option arguments passed through (-p, -i, etc.).
@@ -15,7 +13,7 @@ pub struct CsshArgs {
 
 /// Parse CLI arguments.
 ///
-/// Format: cssh [--remote-name NAME] [--listen-port PORT] [SSH_OPTIONS...] <destination> [-- <COMMAND...>]
+/// Format: cssh [--listen-port PORT] [SSH_OPTIONS...] <destination> [-- <COMMAND...>]
 pub fn parse() -> Result<CsshArgs, String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     parse_from(&args)
@@ -23,7 +21,6 @@ pub fn parse() -> Result<CsshArgs, String> {
 
 /// Parse from a given argument list (for testing).
 pub fn parse_from(args: &[String]) -> Result<CsshArgs, String> {
-    let mut remote_name = "cexec".to_string();
     let mut listen_port: u16 = 0;
     let mut ssh_options = Vec::new();
     let mut destination = None;
@@ -41,13 +38,7 @@ pub fn parse_from(args: &[String]) -> Result<CsshArgs, String> {
             break;
         }
 
-        if arg == "--remote-name" {
-            i += 1;
-            remote_name = args
-                .get(i)
-                .ok_or("--remote-name requires a value")?
-                .clone();
-        } else if arg == "--listen-port" {
+        if arg == "--listen-port" {
             i += 1;
             listen_port = args
                 .get(i)
@@ -81,7 +72,6 @@ pub fn parse_from(args: &[String]) -> Result<CsshArgs, String> {
     let destination = destination.ok_or("destination is required")?;
 
     Ok(CsshArgs {
-        remote_name,
         listen_port,
         ssh_options,
         destination,
@@ -107,7 +97,6 @@ mod tests {
 
         // Assert
         assert_eq!(result.destination, "user@host");
-        assert_eq!(result.remote_name, "cexec");
         assert_eq!(result.listen_port, 0);
         assert!(result.ssh_options.is_empty());
         assert!(result.remote_command.is_empty());
@@ -123,19 +112,21 @@ mod tests {
 
         // Assert
         assert_eq!(result.destination, "user@host");
-        assert_eq!(result.ssh_options, s(&["-p", "2222", "-i", "~/.ssh/id_rsa"]));
+        assert_eq!(
+            result.ssh_options,
+            s(&["-p", "2222", "-i", "~/.ssh/id_rsa"])
+        );
     }
 
     #[test]
     fn parses_cssh_specific_options() {
         // Arrange
-        let args = s(&["--remote-name", "myexec", "--listen-port", "8080", "user@host"]);
+        let args = s(&["--listen-port", "8080", "user@host"]);
 
         // Act
         let result = parse_from(&args).unwrap();
 
         // Assert
-        assert_eq!(result.remote_name, "myexec");
         assert_eq!(result.listen_port, 8080);
     }
 

@@ -2,23 +2,24 @@ use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 
 use crate::args::CsshArgs;
-use crate::deployment;
 use cssh_common::platform;
 
 /// Run the main cssh workflow.
 ///
-/// 1. Start the agent in the background
-/// 2. Deploy cssh-remote to the remote host
-/// 3. Open SSH connection with reverse port forwarding
+/// 1. Generate authentication token
+/// 2. Start the agent in the background
+/// 3. Write agent port and token to a file on the remote host
+/// 4. Open SSH connection with reverse port forwarding
 pub async fn run(args: CsshArgs) -> Result<(), String> {
+    // Generate authentication token
+    let token = generate_token();
+
     // Start the agent
-    let (agent_process, agent_port) = start_agent(&args)?;
+    let (agent_process, agent_port) = start_agent(&args, &token)?;
     tracing::info!("agent started: port {}", agent_port);
 
-    // Deploy remote binary
-    if let Err(e) = deployment::deploy_remote_binary(&args) {
-        tracing::warn!("remote binary deployment skipped: {}", e);
-    }
+    // Write agent port and token to file on remote
+    write_remote_port_file(&args, agent_port, &token)?;
 
     // SSH connection
     let exit_code = run_ssh(&args, agent_port)?;
@@ -32,8 +33,15 @@ pub async fn run(args: CsshArgs) -> Result<(), String> {
     Ok(())
 }
 
+/// Generate a random 32-byte hex authentication token (64 characters).
+fn generate_token() -> String {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).expect("failed to generate random token");
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
 /// Start the agent process in the background and return the assigned port.
-fn start_agent(args: &CsshArgs) -> Result<(AgentGuard, u16), String> {
+fn start_agent(args: &CsshArgs, token: &str) -> Result<(AgentGuard, u16), String> {
     let port_arg = args.listen_port.to_string();
 
     // Find cssh-agent in the same directory
@@ -41,6 +49,7 @@ fn start_agent(args: &CsshArgs) -> Result<(AgentGuard, u16), String> {
 
     let mut child = Command::new(&agent_bin)
         .arg(&port_arg)
+        .arg(token)
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
@@ -73,15 +82,18 @@ fn find_agent_binary() -> Result<String, String> {
 fn run_ssh(args: &CsshArgs, agent_port: u16) -> Result<i32, String> {
     let mut cmd = Command::new("ssh");
 
-    // Reverse port forwarding: connect the remote port to the local agent port
-    cmd.arg("-R")
-        .arg(format!("{}:127.0.0.1:{}", agent_port, agent_port));
-
-    // Send CSSH_PORT environment variable to the remote
-    cmd.arg("-o")
-        .arg("SendEnv=CSSH_PORT")
-        .arg("-o")
-        .arg(format!("SetEnv=CSSH_PORT={}", agent_port));
+    // Reverse port forwarding: connect the remote port to the local agent port.
+    // On Unix hosts, use Unix domain socket forwarding (streamlocal).
+    // On Windows hosts, fall back to TCP port forwarding.
+    let forward_arg = if platform::supports_unix_socket_forwarding() {
+        format!(
+            "/tmp/cssh-agent-{}.sock:127.0.0.1:{}",
+            agent_port, agent_port
+        )
+    } else {
+        format!("{}:127.0.0.1:{}", agent_port, agent_port)
+    };
+    cmd.arg("-R").arg(&forward_arg);
 
     // User-specified SSH options
     for opt in &args.ssh_options {
@@ -105,6 +117,45 @@ fn run_ssh(args: &CsshArgs, agent_port: u16) -> Result<i32, String> {
     Ok(status.code().unwrap_or(1))
 }
 
+/// Build the shell command that creates the agent port file with restricted permissions.
+///
+/// Uses `umask 077` in a subshell so the file is created with mode 600 from the start,
+/// avoiding a TOCTOU race between file creation and chmod.
+fn build_port_file_command(connection_info: &str) -> String {
+    format!(
+        "mkdir -p ~/.cssh && (umask 077 && printf '%s\\n' '{}' > ~/.cssh/agent_port)",
+        connection_info
+    )
+}
+
+/// Write the agent port number and token to a file on the remote host.
+///
+/// Creates `~/.cssh/agent_port` containing the port and token (one per line)
+/// with permissions 600 so that cexec can discover the agent securely.
+fn write_remote_port_file(args: &CsshArgs, port: u16, token: &str) -> Result<(), String> {
+    let mut cmd = Command::new("ssh");
+    for opt in &args.ssh_options {
+        cmd.arg(opt);
+    }
+    // Write connection info in the new format:
+    //   Unix host:    socket|/tmp/cssh-agent-{port}.sock|{token}
+    //   Windows host: tcp|{port}|{token}
+    let connection_info = if platform::supports_unix_socket_forwarding() {
+        format!("socket|/tmp/cssh-agent-{}.sock|{}", port, token)
+    } else {
+        format!("tcp|{}|{}", port, token)
+    };
+    cmd.arg(&args.destination)
+        .arg(build_port_file_command(&connection_info));
+    let status = cmd
+        .status()
+        .map_err(|e| format!("failed to write port file: {}", e))?;
+    if !status.success() {
+        return Err("failed to write ~/.cssh/agent_port on remote".to_string());
+    }
+    Ok(())
+}
+
 /// Guard that automatically kills the agent process on drop.
 struct AgentGuard(Child);
 
@@ -123,5 +174,48 @@ mod tests {
     fn find_agent_binary_does_not_panic() {
         // Verify that find_agent_binary does not panic
         let _ = find_agent_binary();
+    }
+
+    #[test]
+    fn generate_token_returns_64_char_hex_string() {
+        // Act
+        let token = generate_token();
+
+        // Assert
+        assert_eq!(token.len(), 64);
+        assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn port_file_command_uses_umask_instead_of_chmod() {
+        // Arrange
+        let connection_info = "socket|/tmp/cssh-agent-12345.sock|abcdef";
+
+        // Act
+        let cmd = build_port_file_command(connection_info);
+
+        // Assert
+        assert!(
+            cmd.contains("umask 077"),
+            "command should use umask 077 subshell"
+        );
+        assert!(
+            !cmd.contains("chmod"),
+            "command should not use chmod (TOCTOU risk)"
+        );
+        assert!(
+            cmd.contains(connection_info),
+            "command should contain connection info"
+        );
+    }
+
+    #[test]
+    fn generate_token_produces_unique_values() {
+        // Act
+        let token1 = generate_token();
+        let token2 = generate_token();
+
+        // Assert
+        assert_ne!(token1, token2);
     }
 }

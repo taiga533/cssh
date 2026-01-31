@@ -16,29 +16,30 @@ SSH をラップし、接続時にホスト側エージェントを自動起動�
 `cssh` は以下を自動で行う:
 
 1. ホスト側で `cssh-agent` をバックグラウンド起動
-2. `cexec` バイナリをリモートの `~/.cssh/` に配置（初回のみ）
-3. `-R` 逆ポートフォワーディング付きで SSH 接続
-4. リモートで `cexec <コマンド>` を実行すると、ホスト側でそのコマンドが実行される
+2. `-R` 逆ポートフォワーディング付きで SSH 接続
+3. リモートで `cexec <コマンド>` を実行すると、ホスト側でそのコマンドが実行される
 
 ## インストール
 
-```bash
-cargo build --release
-```
+### ホスト側（`cssh` を実行するマシン）
 
-ビルド後のバイナリは `target/release/` に生成される:
-
-| バイナリ | 説明 |
-|---|---|
-| `cssh` | CLI 本体 |
-| `cssh-agent` | ホスト側エージェント |
-| `cexec` | リモート実行ファイル |
-
-3つのバイナリを同一ディレクトリに配置し、PATH に追加する。
+`cssh` と `cssh-agent` をインストールする:
 
 ```bash
-export PATH="$(pwd)/target/release:$PATH"
+cargo install --git https://github.com/taiga533/cssh cssh-cli cssh-agent
 ```
+
+`cssh-agent` は `cssh` が自動起動するため、PATH に含まれている必要がある。
+
+### リモート側（`cexec` を実行するマシン）
+
+各リモートホストに `cexec` をインストールする:
+
+```bash
+cargo install --git https://github.com/taiga533/cssh cssh-remote
+```
+
+`cexec` がリモートホストの PATH に含まれている必要がある。
 
 ## 使い方
 
@@ -78,11 +79,10 @@ cexec pwd
 
 | オプション | 説明 | デフォルト |
 |---|---|---|
-| `--remote-name <NAME>` | リモート実行ファイル名 | `cexec` |
 | `--listen-port <PORT>` | エージェントポート | 自動割り当て |
 
 ```bash
-cssh --remote-name myexec --listen-port 8080 user@example.com
+cssh --listen-port 8080 user@example.com
 ```
 
 ## SSH サーバー設定
