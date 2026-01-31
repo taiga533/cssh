@@ -23,3 +23,4 @@ clap = { version = "4.5.27", features = ["derive"] }
 daemonize = "0.5.0"
 tempfile = "3.15.0"
 getrandom = "0.3.2"
+subtle = "2.6.1"
